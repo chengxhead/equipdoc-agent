@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.npy binary
+*.npz binary
+*.mat binary
+*.pth binary
+*.safetensors binary

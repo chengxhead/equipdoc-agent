@@ -1,0 +1,12 @@
+services:
+  equipdoc-demo:
+    build: .
+    ports:
+      - "7860:7860"
+    environment:
+      EQUIPDOC_DEMO_MODE: "true"
+      EQUIPDOC_SERVER_HOST: "0.0.0.0"
+      EQUIPDOC_SERVER_PORT: "7860"
+    volumes:
+      - ./runtime:/app/runtime
+

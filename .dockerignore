@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+.env
+runtime
+outputs
+logs
+vector_db
+models
+data/raw
+data/processed
+artifacts/legacy
+

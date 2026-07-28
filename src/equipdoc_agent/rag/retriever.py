@@ -9,16 +9,44 @@ from ..config import Settings
 
 
 def _tokenize(text: str) -> list[str]:
+    """Return deterministic Chinese/ASCII tokens for model-free retrieval.
+
+    Character bi/tri-grams make the fallback useful for domain terms such as
+    ``齿面磨损`` and ``包络解调`` without requiring jieba.  When jieba is
+    installed, its word tokens are additive rather than replacing the stable
+    fallback, so the public evaluation does not change completely by environment.
+    """
+    normalized = text.lower()
+    tokens = re.findall(r"[a-z0-9_]+", normalized)
+    for segment in re.findall(r"[\u4e00-\u9fff]+", normalized):
+        if len(segment) == 1:
+            tokens.append(segment)
+            continue
+        tokens.extend(segment[index : index + 2] for index in range(len(segment) - 1))
+        if len(segment) >= 3:
+            tokens.extend(segment[index : index + 3] for index in range(len(segment) - 2))
     try:
         import jieba
 
-        tokens = [token.strip().lower() for token in jieba.lcut(text) if token.strip()]
+        tokens.extend(token.strip().lower() for token in jieba.lcut(text) if token.strip())
     except ImportError:
-        tokens = [
-            token.lower()
-            for token in re.findall(r"[\u4e00-\u9fff]{1,2}|[A-Za-z0-9_]+", text)
-        ]
+        pass
     return tokens
+
+
+def _searchable_text(item: dict[str, Any]) -> str:
+    metadata = item.get("metadata") or {}
+    keywords = metadata.get("keywords") or []
+    return "\n".join(
+        str(value)
+        for value in (
+            item.get("title", ""),
+            item.get("heading_path", ""),
+            " ".join(str(keyword) for keyword in keywords),
+            item.get("text", ""),
+        )
+        if value
+    )
 
 
 def _matches_filters(item: dict[str, Any], filters: dict[str, str] | None) -> bool:
@@ -52,7 +80,7 @@ class KnowledgeRetriever:
         self.settings = settings
         self.chunks = self._load_chunks(settings.rag_chunks_path)
         self.chunk_by_id = {item["chunk_id"]: item for item in self.chunks}
-        self.tokenized = [_tokenize(item.get("text", "")) for item in self.chunks]
+        self.tokenized = [_tokenize(_searchable_text(item)) for item in self.chunks]
         self._bm25 = None
         self._dense_collection = None
         self._embedding_model = None
@@ -181,4 +209,3 @@ class KnowledgeRetriever:
             key=lambda item: item.get("rrf_score", 0.0),
             reverse=True,
         )[:final_k]
-

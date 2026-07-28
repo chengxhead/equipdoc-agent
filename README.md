@@ -221,7 +221,24 @@ python -m unittest discover -s tests -v
 
 `.github/workflows/ci.yml` 会在 GitHub 上使用 Python 3.10、3.11 和 3.12 自动运行单元测试、健康检查和 Demo Smoke Test。
 
+P1 还把 Agent 与 RAG 指标设为回归门槛，防止后续改动静默降低当前基线：
+
+```bash
+python scripts/eval_agent_workflow.py --min-case-pass-rate 0.85
+python scripts/eval_rag_retrieval.py --min-hit-at-5 0.90 --min-mrr-at-10 0.75
+```
+
 ## 评测证据与适用边界
+
+当前可复现的 P1 基线：
+
+| 模块 | 结果 | 口径 |
+|---|---:|---|
+| Agent 工作流 | 30 条总通过率 86.7% | 无模型 Demo；确定性路由与人工审核流程 |
+| RAG 检索 | Hit@5 92.0%，MRR@10 78.6% | 100 条测试；词法检索；文档级相关性 |
+| CNN | 暂不报告准确率 | 旧数据不具备可信文件级 Group Split 条件 |
+
+完整指标、失败样例和口径说明见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
 
 `artifacts/legacy/` 保存原 AutoDL 结果，用于保留实验链路，不作为最终性能结论：
 

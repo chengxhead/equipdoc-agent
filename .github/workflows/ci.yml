@@ -44,3 +44,16 @@ jobs:
 
       - name: Run demo smoke test
         run: python scripts/demo_smoke.py
+
+      - name: Run Agent workflow regression gate
+        run: >-
+          python scripts/eval_agent_workflow.py
+          --output runtime/p1_agent_workflow.json
+          --min-case-pass-rate 0.85
+
+      - name: Run lexical RAG regression gate
+        run: >-
+          python scripts/eval_rag_retrieval.py
+          --output runtime/p1_rag_retrieval.json
+          --min-hit-at-5 0.90
+          --min-mrr-at-10 0.75

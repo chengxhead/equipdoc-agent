@@ -1,311 +1,260 @@
 # EquipDoc-Agent
 
-面向机电设备运维场景的可审核、可降级 Agent 作品。项目将安全策略、LangGraph 人工审核、轴承信号诊断工具、可选 RAG 和证据化报告组织为一个可复现的公开仓库。
+[![CI](https://github.com/yu123-tqy/equipdoc-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/yu123-tqy/equipdoc-agent/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.10--3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![Portfolio License](https://img.shields.io/badge/license-portfolio%20review-lightgrey)](LICENSE)
 
-> P0 status: the repository can run in a clearly labelled model-free Demo mode. Full-model metrics and cross-condition evaluation are intentionally deferred to P1.
+面向机电设备运维场景的可审核、可降级 Agent。项目将确定性安全策略、LangGraph 人工审核、轴承振动信号诊断工具、可选 RAG 和证据化报告组织为一个可复现的公开工程作品。
 
-## 项目解决什么问题
+> 当前公开版本默认运行在无模型 Demo 模式：可以完整演示 Agent 工作流，但故障类型是明确标注的固定案例回放，不能作为真实设备诊断结果。Full 模式需要单独配置 Qwen 服务、CNN 权重和可选向量库。
 
-传统大模型问答无法直接分析时序信号，也容易在设备信息不足时编造维修依据。本项目关注的是一个受控流程：
+![EquipDoc-Agent Demo 首页](docs/assets/demo-overview.png)
 
-```text
-安全上传振动信号
-→ 确定性策略判断任务边界
-→ 人工审核工具调用
-→ 轴承诊断工具
-→ 检索故障机理与维修依据
-→ 生成带边界说明的诊断报告
+## 30 秒了解项目
+
+| 项目维度 | 当前实现 |
+|---|---|
+| 目标场景 | 轴承振动信号辅助分析与运维报告生成 |
+| Agent 编排 | LangGraph 状态图、条件路由、可恢复中断 |
+| 人机协同 | 诊断工具执行前必须 Approve/Reject |
+| 工具能力 | `.npy` 信号校验、CNN 诊断接口、知识检索、报告生成 |
+| 安全边界 | 上传沙箱、大小与数值检查、路径白名单、显式降级 |
+| 运行方式 | 本地 Gradio、Docker、AutoDL Full 模式 |
+| 当前证据 | 单元测试、Smoke Test、历史实验文件和限制说明 |
+
+## 为什么需要这个 Agent
+
+通用大模型无法直接分析振动时序信号，也容易在设备信息不足时生成缺少依据的维修建议。本项目把自然语言交互与专用诊断工具分离，并在高影响工具调用前加入人工审核：
+
+```mermaid
+flowchart LR
+    A[上传振动信号] --> B[安全校验]
+    B --> C[策略判断任务边界]
+    C --> D{人工审核}
+    D -->|Approve| E[轴承诊断工具]
+    D -->|Reject| F[终止工具调用]
+    E --> G[检索故障机理与维护依据]
+    G --> H[生成带证据与边界的报告]
 ```
 
 项目不控制真实设备，不替代工程师作出高风险维修决策，也不根据单段信号预测精确剩余寿命。
 
-## P0 已完成
+## 核心能力
 
-- 标准 `src/` Python 包和 `pyproject.toml`；
-- Git/环境变量/依赖/Docker 发布骨架；
-- 去除 AutoDL 绝对路径；
-- CNN、LLM 和向量库懒加载；
-- 缺少7B模型时可运行的显式 Demo 模式；
-- `.npy` 文件沙箱、大小、类型和数值检查；
-- 启动前健康检查；
-- Gradio 文件上传和 LangGraph Approve/Reject；
-- 无向量库时的词法检索降级；
-- 原始评测与部署 JSON 作为 `artifacts/legacy/` 历史证据保存；
-- 对旧 CNN 数据切分局限的明确说明；
-- 不依赖模型权重的基础单元测试。
+- **可审核工作流**：使用 LangGraph interrupt/resume，在工具执行前展示调用参数并等待审批；
+- **确定性安全策略**：信号和诊断意图同时满足时才进入诊断分支，关键判断不依赖 LLM 自由发挥；
+- **受限信号工具**：只接受沙箱内、受限大小、有限数值的 `.npy` 一维信号；
+- **显式降级**：缺少 Qwen、CNN 权重或 Chroma 时不静默伪装，Demo 模式和词法检索会明确标注；
+- **证据化输出**：报告区分输入事实、工具结果、检索依据、建议和适用边界；
+- **可复现工程骨架**：包含 `pyproject.toml`、环境变量、Docker、健康检查、Smoke Test 和 CI。
 
-## 当前项目结构
+## 演示结果
 
-```text
-equipdoc-agent-portfolio/
-├─ app_gradio.py
-├─ pyproject.toml
-├─ .env.example
-├─ Dockerfile
-├─ docker-compose.yml
-├─ src/equipdoc_agent/
-│  ├─ config.py
-│  ├─ health.py
-│  ├─ agent/
-│  ├─ tools/
-│  ├─ models/
-│  └─ rag/
-├─ data/
-│  ├─ samples/
-│  ├─ knowledge/
-│  └─ eval/
-├─ scripts/
-│  ├─ build_rag_index.py
-│  ├─ demo_smoke.py
-│  └─ legacy/
-├─ tests/
-├─ docs/
-└─ artifacts/legacy/
-```
+诊断工具调用前，系统会暂停工作流并等待人工审核。审核界面只展示工具名称和经过脱敏的文件名，不暴露服务器内部路径。
 
-详细架构见 [`docs/architecture.md`](docs/architecture.md)，从 AutoDL 快照迁移了什么见 [`docs/migration-notes.md`](docs/migration-notes.md)。
+![EquipDoc-Agent 人工审核工具调用](docs/assets/demo-review.png)
 
-## 方式一：无模型 Demo 模式
+审批通过后，系统输出带 Demo 标识、检索证据、处理建议和适用边界的报告：
 
-这是第一次克隆仓库时的推荐路径。它不需要 Qwen、Torch、CNN 权重或 Chroma 向量库。
+![EquipDoc-Agent Demo 诊断报告](docs/assets/demo-report.png)
 
-### 1. 准备 Python
+## 快速运行 Demo
 
-推荐 Python 3.10 或3.11。
+### 1. 环境要求
 
-```bash
-python -m venv .venv
-```
+- Python 3.10、3.11 或 3.12；
+- Demo 模式不需要 GPU、Qwen 模型、CNN 权重或向量库。
 
-Linux/AutoDL：
-
-```bash
-source .venv/bin/activate
-```
+### 2. 创建环境并安装
 
 Windows PowerShell：
 
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-### 2. 安装 Demo 依赖
-
-```bash
 python -m pip install --upgrade pip
 pip install -e ".[demo]"
-```
-
-### 3. 创建配置
-
-Linux/AutoDL：
-
-```bash
-cp .env.example .env
-```
-
-Windows PowerShell：
-
-```powershell
 Copy-Item .env.example .env
 ```
 
-确认 `.env` 中为：
-
-```text
-EQUIPDOC_DEMO_MODE=true
-```
-
-### 4. 运行健康检查和 Smoke Test
+Linux / AutoDL：
 
 ```bash
-equipdoc-health --strict
-python scripts/demo_smoke.py
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[demo]"
+cp .env.example .env
 ```
 
-健康检查中的 `bearing_model` 和 `rag_vector_db` 可以显示为不存在，因为它们在 Demo 模式不是必需项。
+### 3. 健康检查与测试
 
-### 5. 启动页面
+```bash
+python -m equipdoc_agent.health --strict
+python scripts/demo_smoke.py
+python -m unittest discover -s tests -v
+```
+
+Demo 模式下，`bearing_model`、`bearing_norm` 和 `rag_vector_db` 可以显示为不存在，因为它们不是必需项。
+
+### 4. 启动页面
 
 ```bash
 python app_gradio.py
 ```
 
-浏览器打开：
+打开终端显示的本地地址，默认是：
 
 ```text
 http://127.0.0.1:7860
 ```
 
-若 `7860` 已被其他程序占用，应用会自动依次尝试 `7861`、`7862` 等端口。请以终端中 `Running on local URL` 后显示的实际地址为准。也可以在 PowerShell 中手动指定端口：
+若 `7860` 已被占用，应用会自动尝试 `7861`、`7862` 等端口。
 
-```powershell
-$env:EQUIPDOC_SERVER_PORT="7861"
-.\.venv\Scripts\python.exe .\app_gradio.py
-```
+### 5. 体验审核流程
 
-页面默认使用仓库内的 `data/samples/test_signal.npy`。提交后会出现工具审核，点击 Approve 才继续生成报告。
+1. 保持“使用仓库内置演示信号”为勾选状态；
+2. 使用默认问题“请诊断这段轴承振动信号，并给出判断依据和处理建议”；
+3. 点击“提交”，查看待审核的工具名称和参数；
+4. 点击 `Approve` 继续生成报告，或点击 `Reject` 验证拒绝分支；
+5. Demo 报告会明确说明结果是固定案例，不是真实模型推理。
 
-Demo 页面会明确显示：故障类型是固定案例回放，不是本机模型推理结果。
+## 运行模式
 
-## 方式二：Docker Demo
+| 模式 | 用途 | 必需资源 | 输出边界 |
+|---|---|---|---|
+| Demo | 公开仓库复现、工作流演示 | Demo 依赖、内置信号 | 固定故障案例，明确标注 |
+| Full | AutoDL 或 GPU 环境实验 | Qwen 服务、CNN 权重，可选向量库 | 使用实际工具结果，仍需人工复核 |
+
+## Docker Demo
 
 ```bash
 docker compose up --build
 ```
 
-打开：
+浏览器打开 `http://127.0.0.1:7860`。Docker 镜像只包含 Demo 所需依赖，不包含7B模型和 Torch。
 
-```text
-http://127.0.0.1:7860
-```
-
-Docker 镜像只包含 Demo 所需依赖，不包含7B模型和 Torch。
-
-## 方式三：AutoDL Full 模式
-
-Full 模式需要你在 AutoDL 上保留或重新生成模型文件。
+## AutoDL Full 模式
 
 ### 1. 安装完整依赖
 
-建议新建环境，避免破坏原实验环境：
-
 ```bash
-conda create -n equipdoc-public python=3.11 -y
-conda activate equipdoc-public
 pip install -e ".[demo,ml,rag]"
 ```
 
-如现有 CUDA/Torch 环境已经可用，可以先安装 `[demo,rag]`，不要无条件升级 Torch。
+### 2. 准备本地模型文件
 
-### 2. 准备轴承模型文件
-
-Full 模式默认需要：
+把文件放在配置指定位置，不要提交 GitHub：
 
 ```text
 models/bearing_cnn.pth
 data/processed/norm.npy
 ```
 
-可以从原 AutoDL 项目复制：
-
-```bash
-mkdir -p models data/processed
-cp /root/autodl-tmp/equipdoc-agent/models/bearing_cnn.pth models/
-cp /root/autodl-tmp/equipdoc-agent/data/processed/norm.npy data/processed/
-```
-
-旧模型仅用于复现原工具链。其100%测试准确率不代表跨工况泛化，详见 `scripts/legacy/README.md`。
-
-### 3. 配置 Qwen 服务
-
-不要把14GB合并模型上传 GitHub。让模型继续保留在 AutoDL，并启动一个 OpenAI-compatible 服务。
+### 3. 配置服务
 
 在 `.env` 中修改：
 
-```text
+```dotenv
 EQUIPDOC_DEMO_MODE=false
 EQUIPDOC_LLM_BASE_URL=http://127.0.0.1:8000/v1
 EQUIPDOC_LLM_MODEL=qwen-equipdoc
 EQUIPDOC_LLM_API_KEY=EMPTY
 ```
 
-模型服务必须至少支持普通 `/v1/chat/completions`。诊断主路径有确定性安全路由；如果希望展示真正的 LLM 结构化工具选择，服务还必须支持 `tools/tool_calls`，并在 P1 中单独评测。
+Qwen 服务应提供 OpenAI-compatible `/chat/completions` 接口。模型继续保留在 AutoDL，不应把大模型权重上传 GitHub。
 
-### 4. 构建可选向量库
-
-```bash
-python scripts/build_rag_index.py --reset
-```
-
-如果不构建向量库，系统仍会使用词法检索，并在健康信息中明确显示 Dense Retrieval 未启用。
-
-### 5. 检查并启动
+### 4. 可选：构建向量库
 
 ```bash
-equipdoc-health --strict
-python app_gradio.py
+python scripts/build_rag_index.py
 ```
+
+没有向量库时，系统会降级到词法检索，并在健康信息中说明 Dense Retrieval 未启用。
+
+## 项目结构
+
+```text
+equipdoc-agent/
+├─ app_gradio.py               # Gradio 演示入口
+├─ pyproject.toml              # 包、依赖和工具配置
+├─ src/equipdoc_agent/
+│  ├─ agent/                   # LangGraph、策略和报告
+│  ├─ tools/                   # 安全信号诊断工具
+│  ├─ rag/                     # Dense/词法检索与降级
+│  ├─ models/                  # CNN 结构定义
+│  ├─ config.py
+│  └─ health.py
+├─ data/
+│  ├─ samples/                 # 可公开演示信号
+│  ├─ knowledge/               # 当前知识笔记
+│  └─ eval/                    # 评测输入
+├─ tests/                      # 不依赖大模型的基础测试
+├─ scripts/                    # Smoke Test、索引和历史脚本
+├─ docs/                       # 架构、迁移说明与展示素材
+└─ artifacts/legacy/          # 原 AutoDL 历史证据
+```
+
+详细设计见 [`docs/architecture.md`](docs/architecture.md)，迁移说明见 [`docs/migration-notes.md`](docs/migration-notes.md)。
 
 ## 配置说明
 
-所有配置都放在环境变量中，完整示例见 `.env.example`。
+完整示例见 [`.env.example`](.env.example)。
 
 | 变量 | 用途 | 安全默认值 |
 |---|---|---|
 | `EQUIPDOC_DEMO_MODE` | 是否使用无模型固定案例 | `true` |
 | `EQUIPDOC_LLM_BASE_URL` | OpenAI-compatible 服务地址 | 本机8000端口 |
-| `EQUIPDOC_BEARING_MODEL_PATH` | CNN权重 | `models/bearing_cnn.pth` |
+| `EQUIPDOC_BEARING_MODEL_PATH` | CNN 权重路径 | `models/bearing_cnn.pth` |
 | `EQUIPDOC_UPLOAD_ROOT` | 上传沙箱 | `runtime/uploads` |
-| `EQUIPDOC_MAX_UPLOAD_MB` | 文件大小限制 | `8` |
-| `EQUIPDOC_RAG_DB_DIR` | Chroma目录 | `vector_db/chroma_equipdoc` |
-| `EQUIPDOC_EMBEDDING_MODEL` | Embedding模型 | `bge-small-zh-v1.5` |
+| `EQUIPDOC_MAX_UPLOAD_MB` | 上传大小限制 | `8` |
+| `EQUIPDOC_RAG_DB_DIR` | Chroma 目录 | `vector_db/chroma_equipdoc` |
+| `EQUIPDOC_EMBEDDING_MODEL` | Embedding 模型 | `BAAI/bge-small-zh-v1.5` |
 
-## 测试
+## 测试与持续集成
 
-基础测试不调用7B模型：
+本地测试：
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-如果安装了开发依赖，也可以：
+`.github/workflows/ci.yml` 会在 GitHub 上使用 Python 3.10、3.11 和 3.12 自动运行单元测试、健康检查和 Demo Smoke Test。
 
-```bash
-pytest -q
-ruff check .
-```
+## 评测证据与适用边界
 
-## 安全与公开边界
-
-- UI不接受服务器路径输入，只接受上传文件或内置样例；
-- 上传文件被复制到 `runtime/uploads`，使用随机文件名；
-- 工具只允许读取 `data/samples` 和 `runtime/uploads`；
-- 仅接受受限大小的数值型 `.npy`；
-- 禁止把真实单位代码、内部手册、设备参数和客户数据加入仓库；
-- Demo 标签不能删除，否则固定案例结果可能被误解为真实推理；
-- 当前知识库是自写笔记，P1需要补充权威来源和版本信息。
-
-## 当前证据应如何解释
-
-`artifacts/legacy/` 保存了原 AutoDL 结果，但不在首页宣传为最终性能：
+`artifacts/legacy/` 保存原 AutoDL 结果，用于保留实验链路，不作为最终性能结论：
 
 - 30条 Agent 评测主要验证规则路由和审核分支；
-- FP16结果只有9次串行请求，而且没有记录GPU型号；
+- FP16结果只有9次串行请求，且没有记录GPU型号；
 - BNB 4-bit结果是单问题测试；
 - 旧CNN随机窗口拆分存在同源数据泄漏风险；
 - 100条 RAG 测试集存在，但当前仓库没有原实验的最终 RAG 输出。
 
-P1完成前，简历不应写“CNN准确率100%”“Agent工具路由100%”或未经人工复核的“幻觉降低率”。
+在完成跨工况 Group Split、人工 groundedness 审查和可复现实验之前，本项目不宣称“CNN准确率100%”“工具路由100%”或未经复核的“幻觉降低率”。
 
-## GitHub 发布建议
+## 安全与公开边界
 
-首次检查后执行：
+- UI只接受上传文件或内置样例，不接受服务器路径输入；
+- 上传文件被复制到 `runtime/uploads` 并使用随机文件名；
+- 工具只允许读取 `data/samples` 和 `runtime/uploads`；
+- 仅接受受限大小的数值型一维 `.npy`；
+- Demo 标签不能删除，避免固定案例被误解为真实推理；
+- 真实单位代码、内部手册、客户数据、模型权重和密钥不得进入仓库；
+- 当前知识库为项目笔记，正式评测前仍需补充权威来源和版本信息。
 
-```bash
-git add .
-git status
-git commit -m "feat: publish reproducible P0 demo"
-```
+## Roadmap
 
-再创建远程仓库并推送。推送前务必检查：
+下一阶段聚焦可信评测，而不是继续堆功能：
 
-```bash
-git status
-git ls-files
-```
-
-确认没有 `.env`、模型权重、AutoDL日志、内部数据和个人密钥。
-
-当前 `LICENSE` 为保留所有权、允许招聘与教育评审的展示许可。如果确认所有代码和数据均有权开放，再单独选择 MIT 或 Apache-2.0。
-
-## 下一阶段
-
-P1聚焦可信评测，而不是继续堆功能：
-
-1. 按原始文件/工况进行 Group Split；
-2. 分开统计规则路由和 LLM 路由；
+1. 按原始文件和工况进行 Group Split；
+2. 分开统计规则路由与 LLM 路由；
 3. 扩展安全、异常、多轮和多工具评测；
-4. 为知识库补权威来源；
+4. 为知识库补充权威来源和版本信息；
 5. 完成人工 groundedness 审查；
-6. 重新运行带GPU、版本、并发和 p95 的部署基准。
+6. 记录 GPU、依赖版本、并发吞吐和 p95 延迟；
+7. 补充面向 AI 产品经理岗位的产品案例文档。
+
+## License
+
+本仓库使用作品展示许可，允许招聘、教育和个人作品评审。第三方模型、数据集、文档和商标仍遵循各自许可，详见 [`LICENSE`](LICENSE) 与 [`NOTICE.md`](NOTICE.md)。

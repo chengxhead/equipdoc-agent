@@ -60,6 +60,16 @@ def _fault_filter(fault_type: str) -> dict[str, str] | None:
     return None
 
 
+def _review_call_payload(call: dict) -> dict:
+    """Build a reviewer-facing tool call without exposing server filesystem paths."""
+    args = dict(call.get("args") or {})
+    signal_path = args.pop("signal_path", None)
+    if signal_path:
+        normalized = str(signal_path).replace("\\", "/")
+        args["signal_file"] = normalized.rsplit("/", 1)[-1]
+    return {"name": call.get("name"), "args": args}
+
+
 def build_graph(settings: Settings | None = None):
     settings = settings or Settings.from_env()
     retriever_holder: dict[str, KnowledgeRetriever] = {}
@@ -165,9 +175,7 @@ def build_graph(settings: Settings | None = None):
         decision = interrupt(
             {
                 "type": "tool_review",
-                "requested_tools": [
-                    {"name": item.get("name"), "args": item.get("args", {})} for item in calls
-                ],
+                "requested_tools": [_review_call_payload(item) for item in calls],
                 "notice": "Approve runs a read-only diagnostic tool; Reject cancels the call.",
             }
         )
@@ -209,4 +217,3 @@ def build_graph(settings: Settings | None = None):
     graph.add_edge("tools", "agent")
     graph.add_edge("cancel", END)
     return graph.compile(checkpointer=MemorySaver())
-

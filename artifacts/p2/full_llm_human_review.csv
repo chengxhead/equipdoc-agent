@@ -1,0 +1,221 @@
+﻿id,group,answer,auto_passed,llm_answer_passed,generation_path,model_selected_evidence_ids,keyword_recall,claim_citation_coverage,claim_evidence_match_rate,citations,human_groundedness_0_or_1,human_answer_correct_0_or_1,human_citation_useful_0_or_1,reviewer_notes
+full_001,bearing_knowledge,"## 结论与依据
+
+- 外圈故障常见表现包括：时域信号出现周期性冲击，频域中外圈故障特征频率及其倍频附近能量增强，包络谱中 BPFO 附近峰值更明显 [bearing_outer_race_fault#bearing_outer_race_fault_c002]
+- 当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关 [bearing_outer_race_fault#bearing_outer_race_fault_c001]
+- 轴承外圈故障通常与外圈滚道局部剥落、点蚀、裂纹或安装座支撑刚度异常有关 [bearing_outer_race_fault#bearing_outer_race_fault_c001]
+- 外圈故障位置相对固定，因此在稳定转速下，振动信号中往往会出现较稳定的冲击重复模式 [bearing_outer_race_fault#bearing_outer_race_fault_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E02;E11;E12,1.0,1.0,1.0,bearing_outer_race_fault#bearing_outer_race_fault_c002;bearing_outer_race_fault#bearing_outer_race_fault_c001;bearing_outer_race_fault#bearing_outer_race_fault_c001;bearing_outer_race_fault#bearing_outer_race_fault_c001,,,,
+full_002,bearing_knowledge,"## 结论与依据
+
+- 内圈故障的诊断应关注内圈故障特征频率 BPFI 及其倍频，也要关注以转频为间隔的边频带 [bearing_inner_race_fault#bearing_inner_race_fault_c001]
+- 内圈故障可能表现为周期性冲击、包络谱中 BPFI 及倍频明显、BPFI 两侧出现转频间隔的边频带 [bearing_inner_race_fault#bearing_inner_race_fault_c002]
+- 与外圈故障不同，内圈随轴旋转，缺陷进入载荷区时冲击更强，离开载荷区时冲击减弱，因此信号常带有转频调制特征 [bearing_inner_race_fault#bearing_inner_race_fault_c001]
+- 如果只有单个 BPFI 附近峰值，不能直接给出确定结论 [bearing_inner_race_fault#bearing_inner_race_fault_c002]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E03;E12;E14,1.0,1.0,1.0,bearing_inner_race_fault#bearing_inner_race_fault_c001;bearing_inner_race_fault#bearing_inner_race_fault_c002;bearing_inner_race_fault#bearing_inner_race_fault_c001;bearing_inner_race_fault#bearing_inner_race_fault_c002,,,,
+full_003,bearing_knowledge,"## 结论与依据
+
+- 若模型输出滚动体故障但置信度不高，应结合润滑油状态、噪声、温度和多传感器数据复核 [bearing_ball_fault#bearing_ball_fault_c002]
+- 滚动体既自转又随保持架公转，接触内外圈时受力状态不断变化，因此振动信号往往比单纯外圈故障更复杂 [bearing_ball_fault#bearing_ball_fault_c001]
+- 建议检查润滑脂或润滑油污染情况、轴承工作温度、载荷冲击和安装状态 [bearing_ball_fault#bearing_ball_fault_c003]
+- 若存在金属磨屑、温升明显或振动趋势快速上升，应安排停机检查并评估是否更换轴承 [bearing_ball_fault#bearing_ball_fault_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",False,False,first_pass,E01;E12;E05;E06,0.5,1.0,1.0,bearing_ball_fault#bearing_ball_fault_c002;bearing_ball_fault#bearing_ball_fault_c001;bearing_ball_fault#bearing_ball_fault_c003;bearing_ball_fault#bearing_ball_fault_c003,,,,
+full_004,bearing_knowledge,"## 结论与依据
+
+- 保持架故障可能出现 FTF 及其倍频成分、低频调制、非稳定冲击和摩擦引起的宽带能量升高 [bearing_cage_fault#bearing_cage_fault_c002]
+- 保持架故障通常不如内外圈故障容易通过单一特征频率稳定识别 [bearing_cage_fault#bearing_cage_fault_c001]
+- 保持架转速低于轴转速，因此相关特征常出现在较低频率区域，并可能伴随宽带摩擦噪声 [bearing_cage_fault#bearing_cage_fault_c001]
+- 若资料不足，应建议补充采样和现场检查，而不是直接推断故障等级 [bearing_cage_fault#bearing_cage_fault_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E04;E13;E15,1.0,1.0,1.0,bearing_cage_fault#bearing_cage_fault_c002;bearing_cage_fault#bearing_cage_fault_c001;bearing_cage_fault#bearing_cage_fault_c001;bearing_cage_fault#bearing_cage_fault_c003,,,,
+full_005,signal_analysis,"## 结论与依据
+
+- 若故障激励了结构高频共振，先做带通滤波再进行包络分析可能更清楚 [vibration_signal_features#vibration_signal_features_c001]
+- 包络谱适合识别调制型冲击，尤其在轴承局部故障中常用 [vibration_signal_features#vibration_signal_features_c001]
+- 若故障发展到中后期，冲击能量、高频共振和时域峭度可能同时升高 [bearing_inner_race_fault#bearing_inner_race_fault_c002]
+- 若故障较严重，可能出现宽带冲击能量升高、峭度增大和高频共振带增强 [bearing_outer_race_fault#bearing_outer_race_fault_c002]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E02;E03;E04,1.0,1.0,1.0,vibration_signal_features#vibration_signal_features_c001;vibration_signal_features#vibration_signal_features_c001;bearing_inner_race_fault#bearing_inner_race_fault_c002;bearing_outer_race_fault#bearing_outer_race_fault_c002,,,,
+full_006,signal_analysis,"## 结论与依据
+
+- RMS 升高可能来自负载变化、安装松动、共振或故障 [vibration_signal_features#vibration_signal_features_c002]
+- 单一指标不能作为最终诊断依据 [vibration_signal_features#vibration_signal_features_c002]
+- 维护措施包括检查轴承座配合、润滑状态、外圈滚道磨损、异常温升和噪声 [bearing_outer_race_fault#bearing_outer_race_fault_c003]
+- 但由于只分析单段信号，建议结合历史趋势和现场检查复核 [vibration_signal_features#vibration_signal_features_c002]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E06;E08;E15;E19,1.0,1.0,1.0,vibration_signal_features#vibration_signal_features_c002;vibration_signal_features#vibration_signal_features_c002;bearing_outer_race_fault#bearing_outer_race_fault_c003;vibration_signal_features#vibration_signal_features_c002,,,,
+full_007,maintenance,"## 结论与依据
+
+- 若模型诊断为外圈故障且置信度较高，建议先复核采样点、转速、负载和传感器安装状态，再进行现场检查 [bearing_outer_race_fault#bearing_outer_race_fault_c003]
+- 模型可以根据振动信号给出故障类别和置信度，但是否停机、更换或继续运行，需要结合设备重要性、负载、温度、噪声、历史趋势和生产风险 [maintenance_decision#maintenance_decision_c001]
+- 若置信度中等或现场症状不明显，建议复测多段信号，确认传感器安装和采样工况，再决定是否拆检 [maintenance_decision#maintenance_decision_c001]
+- 报告中应明确风险提示：基于单段振动信号的诊断不能替代现场拆检，尤其不能直接推断剩余寿命 [bearing_outer_race_fault#bearing_outer_race_fault_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E07;E20;E19,1.0,1.0,1.0,bearing_outer_race_fault#bearing_outer_race_fault_c003;maintenance_decision#maintenance_decision_c001;maintenance_decision#maintenance_decision_c001;bearing_outer_race_fault#bearing_outer_race_fault_c003,,,,
+full_008,maintenance,"## 结论与依据
+
+- 高置信度内圈故障建议检查轴承与轴的配合、润滑情况、轴向载荷、对中状态和温升 [bearing_inner_race_fault#bearing_inner_race_fault_c003]
+- 高置信度故障并伴随温升、噪声增大或振动趋势恶化时，应优先安排停机检查 [maintenance_decision#maintenance_decision_c001]
+- 若存在异常噪声、温度升高或冲击趋势持续恶化，应优先安排停机检查 [bearing_inner_race_fault#bearing_inner_race_fault_c003]
+- 报告中应明确风险提示：基于单段振动信号的诊断不能替代现场拆检，尤其不能直接推断剩余寿命 [bearing_outer_race_fault#bearing_outer_race_fault_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E02;E07;E15,1.0,1.0,1.0,bearing_inner_race_fault#bearing_inner_race_fault_c003;maintenance_decision#maintenance_decision_c001;bearing_inner_race_fault#bearing_inner_race_fault_c003;bearing_outer_race_fault#bearing_outer_race_fault_c003,,,,
+full_009,maintenance,"## 结论与依据
+
+- 诊断报告应区分“模型结论”和“维修决策” [maintenance_decision#maintenance_decision_c001]
+- 用户提供设备类型与现场现象后，也可以列出候选原因，但必须明确这些不是工具诊断结论 [no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c002]
+- 模型可以根据振动信号给出故障类别和置信度，但是否停机、更换或继续运行，需要结合设备重要性、负载、温度、噪声、历史趋势和生产风险 [maintenance_decision#maintenance_decision_c001]
+- 高置信度故障并伴随温升、噪声增大或振动趋势恶化时，应优先安排停机检查 [maintenance_decision#maintenance_decision_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",False,False,first_pass,E01;E03;E07;E12,0.75,1.0,1.0,maintenance_decision#maintenance_decision_c001;no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c002;maintenance_decision#maintenance_decision_c001;maintenance_decision#maintenance_decision_c001,,,,
+full_010,maintenance,"## 结论与依据
+
+- 设备点检发现温升异常时，应先确认测温位置、传感器安装、环境温度和历史基线，排除测点变化或传感器漂移 [equipment_temperature_checks#equipment_temperature_checks_c001]
+- 机械侧应排查轴承润滑不足或过量、游隙和装配异常、对中不良、摩擦加剧、负载突增以及冷却风道堵塞 [equipment_temperature_checks#equipment_temperature_checks_c002]
+- 若电机温升明显，还需要检查负载、散热、润滑和电气状态 [motor_faults#motor_faults_c001]
+- 不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征 [motor_faults#motor_faults_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",False,False,first_pass,E01;E02;E11;E12,0.75,1.0,1.0,equipment_temperature_checks#equipment_temperature_checks_c001;equipment_temperature_checks#equipment_temperature_checks_c002;motor_faults#motor_faults_c001;motor_faults#motor_faults_c001,,,,
+full_011,cross_equipment,"## 结论与依据
+
+- 汽蚀可能表现为宽带噪声、振动升高、流量或压力波动，并可能伴随类似砂石通过的异常声音 [pump_gearbox_faults#pump_gearbox_faults_c001]
+- 怀疑泵汽蚀时，应核对入口条件、阀门状态、流量压力变化和运行声音，并排查叶轮、不对中和基础松动等替代原因 [pump_gearbox_faults#pump_gearbox_faults_c002]
+- 仍需结合入口压力、流量、工况和泵的专用检测信息，不能仅凭轴承分类模型判断 [pump_gearbox_faults#pump_gearbox_faults_c001]
+- 泵类设备常见问题包括汽蚀（也常写作气蚀）、轴承磨损、不对中、叶轮不平衡和基础松动 [pump_gearbox_faults#pump_gearbox_faults_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E03;E01;E04;E11,1.0,1.0,1.0,pump_gearbox_faults#pump_gearbox_faults_c001;pump_gearbox_faults#pump_gearbox_faults_c002;pump_gearbox_faults#pump_gearbox_faults_c001;pump_gearbox_faults#pump_gearbox_faults_c001,,,,
+full_012,cross_equipment,"## 结论与依据
+
+- 齿轮箱故障常涉及齿轮啮合频率、边频带、齿面磨损、断齿和轴承问题 [pump_gearbox_faults#pump_gearbox_faults_c001]
+- 齿轮故障诊断需要齿数、转速和传动级信息，否则很难准确解释啮合频率 [pump_gearbox_faults#pump_gearbox_faults_c001]
+- 怀疑齿面磨损时，应结合啮合频率及边频带、润滑油磨粒、齿轮参数和拆检信息复核 [pump_gearbox_faults#pump_gearbox_faults_c002]
+- 当当前工具只有轴承 CNN 时，系统可以提示泵或齿轮箱可能需要专用工具，不应把所有异常都归因于轴承故障 [pump_gearbox_faults#pump_gearbox_faults_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E02;E03;E04,1.0,1.0,1.0,pump_gearbox_faults#pump_gearbox_faults_c001;pump_gearbox_faults#pump_gearbox_faults_c001;pump_gearbox_faults#pump_gearbox_faults_c002;pump_gearbox_faults#pump_gearbox_faults_c003,,,,
+full_013,cross_equipment,"## 结论与依据
+
+- 不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征 [motor_faults#motor_faults_c001]
+- 电机常见故障包括转子不平衡、不对中、轴承损伤、定转子摩擦、绕组绝缘异常和冷却不良 [motor_faults#motor_faults_c001]
+- 泵类设备常见问题包括汽蚀（也常写作气蚀）、轴承磨损、不对中、叶轮不平衡和基础松动 [pump_gearbox_faults#pump_gearbox_faults_c001]
+- 仍需结合入口压力、流量、工况和泵的专用检测信息，不能仅凭轴承分类模型判断 [pump_gearbox_faults#pump_gearbox_faults_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E02;E03;E14,1.0,1.0,1.0,motor_faults#motor_faults_c001;motor_faults#motor_faults_c001;pump_gearbox_faults#pump_gearbox_faults_c001;pump_gearbox_faults#pump_gearbox_faults_c001,,,,
+full_014,cross_equipment,"## 结论与依据
+
+- 管道泄漏可能引起声发射、压力波动、局部振动和流量异常 [pipeline_leakage_notes#pipeline_leakage_notes_c001]
+- 泄漏孔径、压力、介质、管壁材料和环境噪声都会影响信号特征 [pipeline_leakage_notes#pipeline_leakage_notes_c001]
+- 声发射方法对高频泄漏噪声敏感，但也容易受阀门动作、机械冲击和外界噪声影响 [pipeline_leakage_notes#pipeline_leakage_notes_c001]
+- 对于高风险介质，应优先按安全流程隔离和复核，而不是只依赖单一算法判断 [pipeline_leakage_notes#pipeline_leakage_notes_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E03;E05;E12;E06,1.0,1.0,1.0,pipeline_leakage_notes#pipeline_leakage_notes_c001;pipeline_leakage_notes#pipeline_leakage_notes_c001;pipeline_leakage_notes#pipeline_leakage_notes_c001;pipeline_leakage_notes#pipeline_leakage_notes_c003,,,,
+full_015,cross_equipment,"## 结论与依据
+
+- 早期监测通常需要结合单体温度、温升速率、模组内温差、单体电压一致性、电压异常下降、电流、绝缘状态和 BMS 告警，而不是只看一个温度值 [battery_thermal_monitoring#battery_thermal_monitoring_c001]
+- 温度变化、电压异常和气体信号之间的时间关系，比单一阈值更有助于识别风险，但具体阈值必须来自车型、企业规程或经验证的电池系统资料 [battery_thermal_monitoring#battery_thermal_monitoring_c002]
+- 动力电池热风险不能由轴承振动 CNN 判断 [battery_thermal_monitoring#battery_thermal_monitoring_c001]
+- 当前知识库不包含特定车型、电芯体系和企业处置阈值，因此不能据此给出可直接执行的热失控判定值，也不能远程控制电池系统 [battery_thermal_monitoring#battery_thermal_monitoring_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E03;E02;E05,1.0,1.0,1.0,battery_thermal_monitoring#battery_thermal_monitoring_c001;battery_thermal_monitoring#battery_thermal_monitoring_c002;battery_thermal_monitoring#battery_thermal_monitoring_c001;battery_thermal_monitoring#battery_thermal_monitoring_c003,,,,
+full_016,evidence_boundary,"## 结论与依据
+
+- 没有采集到原始振动信号时，系统不能执行轴承诊断工具，也不能给出故障类别、类别概率或精确剩余寿命 [no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c001]
+- 此时只能依据用户明确提供的现象，给出知识层面的排查方向和需要补充的数据 [no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c001]
+- 资料不足时只能给出排查方向，不能编造温升原因、故障等级或停机阈值 [equipment_temperature_checks#equipment_temperature_checks_c004]
+- RAG 的作用是给出诊断边界和下一步数据需求 [pump_gearbox_faults#pump_gearbox_faults_c003]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",False,False,first_pass,E03;E02;E06;E10,0.75,1.0,1.0,no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c001;no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c001;equipment_temperature_checks#equipment_temperature_checks_c004;pump_gearbox_faults#pump_gearbox_faults_c003,,,,
+full_017,evidence_boundary,"## 结论与依据
+
+- 泄漏孔径、压力、介质、管壁材料和环境噪声都会影响信号特征 [pipeline_leakage_notes#pipeline_leakage_notes_c001]
+- 若置信度中等或现场症状不明显，建议复测多段信号，确认传感器安装和采样工况，再决定是否拆检 [maintenance_decision#maintenance_decision_c001]
+- 建议先补采多段原始信号、核对传感器安装，并结合现场点检后再判断 [no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c003]
+- 管道泄漏可能引起声发射、压力波动、局部振动和流量异常 [pipeline_leakage_notes#pipeline_leakage_notes_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",False,False,first_pass,E07;E01;E02;E10,0.75,1.0,1.0,pipeline_leakage_notes#pipeline_leakage_notes_c001;maintenance_decision#maintenance_decision_c001;no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c003;pipeline_leakage_notes#pipeline_leakage_notes_c001,,,,
+full_018,evidence_boundary,"## 结论与依据
+
+- 相比单次诊断，趋势数据能更可靠地区分偶发冲击和持续退化 [vibration_signal_features#vibration_signal_features_c003]
+- 如果要判断故障发展程度，需要连续采样和趋势分析 [vibration_signal_features#vibration_signal_features_c003]
+- 工程应用中建议记录采样时间、转速、负载、传感器位置和环境信息 [vibration_signal_features#vibration_signal_features_c003]
+- 包络谱适合识别调制型冲击，尤其在轴承局部故障中常用 [vibration_signal_features#vibration_signal_features_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E04;E11;E16,1.0,1.0,1.0,vibration_signal_features#vibration_signal_features_c003;vibration_signal_features#vibration_signal_features_c003;vibration_signal_features#vibration_signal_features_c003;vibration_signal_features#vibration_signal_features_c001,,,,
+full_019,evidence_boundary,"## 结论与依据
+
+- 在项目中，CWRU 数据集适合用于验证诊断工具链路：输入一段振动信号，模型输出故障类别、置信度和类别概率 [cwru_dataset_notes#cwru_dataset_notes_c001]
+- CWRU 数据来自相对标准化的实验条件，真实设备中会有更多干扰，例如转速波动、负载变化、传感器安装差异、背景噪声、复合故障和设备结构差异 [cwru_dataset_notes#cwru_dataset_notes_c002]
+- 若轻量 CNN 在 CWRU 测试集上达到高准确率，能说明该工具在这个数据集划分下有效，但不能直接等同于真实工业场景泛化能力 [cwru_dataset_notes#cwru_dataset_notes_c001]
+- 若要迁移到真实设备，需要补充现场数据、跨工况测试、域适应、在线校准和长期趋势验证 [cwru_dataset_notes#cwru_dataset_notes_c002]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",True,True,first_pass,E01;E04;E11;E12,1.0,1.0,1.0,cwru_dataset_notes#cwru_dataset_notes_c001;cwru_dataset_notes#cwru_dataset_notes_c002;cwru_dataset_notes#cwru_dataset_notes_c001;cwru_dataset_notes#cwru_dataset_notes_c002,,,,
+full_020,evidence_boundary,"## 结论与依据
+
+- 诊断报告中的故障机理、维修建议和风险提示应尽量附带来源 chunk [rag_safety_rules#rag_safety_rules_c003]
+- 若模型诊断为外圈故障且置信度较高，建议先复核采样点、转速、负载和传感器安装状态，再进行现场检查 [bearing_outer_race_fault#bearing_outer_race_fault_c003]
+- 模型可以根据振动信号给出故障类别和置信度，但是否停机、更换或继续运行，需要结合设备重要性、负载、温度、噪声、历史趋势和生产风险 [maintenance_decision#maintenance_decision_c001]
+- 若资料库没有覆盖某个设备型号、标准条款、维修规程或历史记录，系统应明确说明“当前知识库未覆盖”，并建议补充资料，而不是编造 [rag_safety_rules#rag_safety_rules_c001]
+
+## 已知边界
+
+以上内容来自本次检索证据，不能替代现场检查和人工复核。
+",False,False,first_pass,E01;E02;E04;E10,0.75,1.0,1.0,rag_safety_rules#rag_safety_rules_c003;bearing_outer_race_fault#bearing_outer_race_fault_c003;maintenance_decision#maintenance_decision_c001;rag_safety_rules#rag_safety_rules_c001,,,,

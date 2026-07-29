@@ -119,6 +119,8 @@ python scripts/eval_full_llm.py \
 artifacts/p2/service_check.json
 artifacts/p2/full_llm_eval.json
 artifacts/p2/full_llm_human_review.csv
+artifacts/p2/smoke_initial_failure.json
+artifacts/p2/smoke_v6_safe_2_of_3.json
 ```
 
 本地放入：
@@ -143,3 +145,7 @@ C:\Users\MSI\Documents\秋招简历\projects\equipdoc-agent-portfolio\artifacts\
 - 引用有效只表示文档/切片存在，不等于知识来源足够权威；
 - 人工复核表未填写前，不得声称 Full 模式 groundedness 100%；
 - GPU型号、依赖版本和Git提交必须与结果一起保留。
+
+## 9. 当前公开基线
+
+2026-07-29 的 RTX 4090 运行完成20/20次真实模型调用，严格自动通过14/20，平均必需关键词召回91.25%，引用原文逐字匹配率100%，串行端到端 p50/p95 为0.414/0.433秒。详细环境、失败分析和表述边界见 [`p2-full-evaluation-report.md`](p2-full-evaluation-report.md)。

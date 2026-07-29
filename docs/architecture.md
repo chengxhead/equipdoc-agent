@@ -8,7 +8,10 @@ flowchart LR
     REVIEW --> TOOL["Bearing diagnostic tool"]
     TOOL --> RAG["Lexical / optional dense retrieval"]
     RAG --> REPORT["Deterministic evidence report"]
-    LLM["Optional OpenAI-compatible Qwen service"] --> POLICY
+    POLICY --> KNOWLEDGE["Knowledge question"]
+    KNOWLEDGE --> RAG
+    RAG --> LLM["Optional OpenAI-compatible Qwen service"]
+    LLM --> ANSWER["Cited answer"]
 ```
 
 ## Modes
@@ -24,6 +27,7 @@ flowchart LR
 ### Full mode
 
 - connects to an OpenAI-compatible model service;
+- injects retrieved chunks into knowledge-answer prompts and requires `doc_id#chunk_id` citations;
 - loads the bearing CNN lazily on the first tool call;
 - optionally adds Chroma dense retrieval;
 - refuses startup through `equipdoc-health --strict` when required artifacts are absent.
@@ -31,4 +35,3 @@ flowchart LR
 ## Publication boundary
 
 All uploaded files are copied to `runtime/uploads` under generated names. The diagnostic tool only reads files inside `data/samples` or `runtime/uploads`, with extension, size, type, shape, and finite-value checks.
-

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated, TypedDict
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
@@ -17,6 +17,7 @@ from ..config import Settings
 from ..rag import KnowledgeRetriever
 from ..tools import analyze_bearing_signal
 from .policy import should_run_diagnosis
+from .knowledge_answer import build_full_rag_messages
 from .reporting import render_diagnosis_report
 from .safety import assess_high_risk_question
 
@@ -25,13 +26,6 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list, add_messages]
     signal_path: str
     review_result: str
-
-
-SYSTEM_PROMPT = """你是机电装备智能运维辅助 Agent。
-不得编造设备编号、采样位置、维修历史、运行工况或剩余寿命。
-只有用户提供了有效信号且明确要求诊断时，才能调用 diagnose_bearing。
-高风险维修建议必须保留人工确认，不得声称已经控制或维修真实设备。
-"""
 
 
 def _last_human_text(messages: list) -> str:
@@ -89,7 +83,7 @@ def build_graph(settings: Settings | None = None):
 
     tools = [diagnose_bearing]
     tools_by_name = {item.name: item for item in tools}
-    llm_with_tools = None
+    llm = None
     if not settings.demo_mode:
         llm = ChatOpenAI(
             model=settings.llm_model,
@@ -98,7 +92,6 @@ def build_graph(settings: Settings | None = None):
             timeout=settings.llm_timeout_seconds,
             temperature=0,
         )
-        llm_with_tools = llm.bind_tools(tools)
 
     def agent_node(state: AgentState) -> dict:
         messages = state.get("messages", [])
@@ -194,8 +187,21 @@ def build_graph(settings: Settings | None = None):
                 content = "当前为 Demo 模式。请上传 .npy 信号进行固定案例演示，或配置模型服务后进行知识问答。"
             return {"messages": [AIMessage(content=content)]}
 
-        assert llm_with_tools is not None
-        response = llm_with_tools.invoke([SystemMessage(content=SYSTEM_PROMPT), *messages])
+        assert llm is not None
+        retriever = get_retriever()
+        hits = retriever.search(user_text, top_k=5) if retriever and user_text else []
+        if not hits:
+            return {
+                "messages": [
+                    AIMessage(
+                        content=(
+                            "当前证据不足，知识库未检索到可用资料。请补充设备类型、"
+                            "现场现象或有效技术文档后再判断。"
+                        )
+                    )
+                ]
+            }
+        response = llm.invoke(build_full_rag_messages(user_text, hits))
         return {"messages": [response]}
 
     def should_continue(state: AgentState):

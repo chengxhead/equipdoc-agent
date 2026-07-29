@@ -128,11 +128,20 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     latencies = [row["latency_seconds"] for row in rows if row.get("success")]
 
     def quality_block(items: list[dict[str, Any]]) -> dict[str, Any]:
+        retried = [item for item in items if item.get("generation_attempts") == 2]
         return {
             "count": len(items),
             "success_rate": rate(items, "success"),
             "llm_invocation_rate": rate(items, "llm_called"),
             "case_pass_rate": rate(items, "passed"),
+            "llm_answer_pass_rate": rate(items, "llm_answer_passed"),
+            "first_pass_citation_compliance_rate": rate(
+                items, "first_pass_citation_compliant"
+            ),
+            "retry_recovery_rate": (
+                rate(retried, "retry_recovered") if retried else None
+            ),
+            "extractive_fallback_rate": rate(items, "used_extractive_fallback"),
             "average_keyword_recall": mean(items, "keyword_recall"),
             "forbidden_claim_absence_rate": rate(items, "forbidden_claims_ok"),
             "citation_validity_rate": rate(items, "citations_valid"),
@@ -223,10 +232,14 @@ def main() -> None:
             answer = str(getattr(message, "content", ""))
             usage = _usage(message)
             response_metadata = getattr(message, "response_metadata", None) or {}
+            guard = response_metadata.get("equipdoc_answer_guard") or {}
+            generation_path = guard.get("generation_path", "untracked")
+            generation_attempts = guard.get("generation_attempts")
             llm_called = bool(usage) or bool(
                 response_metadata.get("model_name")
                 or response_metadata.get("model")
                 or response_metadata.get("token_usage")
+                or guard
             )
             citations = extract_citations(answer)
             citation_checks = [
@@ -251,6 +264,10 @@ def main() -> None:
                 and citations_valid
                 and reference_doc_hit
             )
+            used_extractive_fallback = generation_path == "extractive_fallback"
+            first_pass_citation_compliant = generation_path == "first_pass"
+            retry_recovered = generation_path == "retry"
+            llm_answer_passed = passed and not used_extractive_fallback
             error = None
             consecutive_errors = 0
         except Exception as exc:
@@ -264,6 +281,12 @@ def main() -> None:
             reference_doc_hit = False
             success = False
             llm_called = False
+            generation_path = "error"
+            generation_attempts = 0
+            used_extractive_fallback = False
+            first_pass_citation_compliant = False
+            retry_recovered = False
+            llm_answer_passed = False
             passed = False
             error = f"{type(exc).__name__}: {exc}"
             consecutive_errors += 1
@@ -275,10 +298,16 @@ def main() -> None:
                 "success": success,
                 "llm_called": llm_called,
                 "passed": passed,
+                "llm_answer_passed": llm_answer_passed,
                 "keyword_recall": keyword_recall,
                 "forbidden_claims_ok": forbidden_claims_ok,
                 "citations_valid": citations_valid,
                 "reference_doc_hit": reference_doc_hit,
+                "generation_path": generation_path,
+                "generation_attempts": generation_attempts,
+                "first_pass_citation_compliant": first_pass_citation_compliant,
+                "retry_recovered": retry_recovered,
+                "used_extractive_fallback": used_extractive_fallback,
                 "citations": [f"{doc_id}#{chunk_id}" for doc_id, chunk_id in citations],
                 "latency_seconds": latency,
                 "output_characters": len(answer),
@@ -301,6 +330,7 @@ def main() -> None:
         "evaluation_contract": {
             "mode": "Full mode with a real OpenAI-compatible local Qwen service",
             "quality_gate": "keyword recall >= 0.5, valid citation, reference hit, no listed forbidden claim",
+            "answer_guard": "one citation-constrained retry, then exact extractive fallback",
             "latency_scope": "serial end-to-end graph invocation after one warmup",
             "not_measured": [
                 "concurrent throughput",
@@ -336,6 +366,8 @@ def main() -> None:
             "group",
             "answer",
             "auto_passed",
+            "llm_answer_passed",
+            "generation_path",
             "keyword_recall",
             "citations",
             "human_groundedness_0_or_1",
@@ -353,6 +385,8 @@ def main() -> None:
                         "group": row["group"],
                         "answer": row["answer"],
                         "auto_passed": row["passed"],
+                        "llm_answer_passed": row["llm_answer_passed"],
+                        "generation_path": row["generation_path"],
                         "keyword_recall": row["keyword_recall"],
                         "citations": ";".join(row["citations"]),
                         "human_groundedness_0_or_1": "",

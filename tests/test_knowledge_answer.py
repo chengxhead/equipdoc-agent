@@ -1,9 +1,12 @@
 import unittest
 
 from equipdoc_agent.agent.knowledge_answer import (
+    build_citation_retry_messages,
     build_full_rag_messages,
     extract_citations,
+    render_extractive_fallback,
     render_retrieval_context,
+    validate_answer_citations,
 )
 
 
@@ -38,6 +41,19 @@ class KnowledgeAnswerTests(unittest.TestCase):
             citations,
             [("bearing_outer_race_fault", "bearing_outer_race_fault_c001")],
         )
+
+    def test_retry_prompt_lists_only_allowed_full_ids(self):
+        messages = build_citation_retry_messages("问题", self.hits, "没有引用的草稿")
+        combined = "\n".join(str(message.content) for message in messages)
+        self.assertIn("唯一允许使用的引用ID", combined)
+        self.assertIn("bearing_outer_race_fault#bearing_outer_race_fault_c001", combined)
+
+    def test_invalid_answer_falls_back_to_exact_cited_evidence(self):
+        validation = validate_answer_citations("没有引用", self.hits)
+        self.assertFalse(validation["valid"])
+        fallback = render_extractive_fallback(self.hits)
+        self.assertTrue(validate_answer_citations(fallback, self.hits)["valid"])
+        self.assertIn("系统已隐藏未验证草稿", fallback)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,12 @@ from ..config import Settings
 from ..rag import KnowledgeRetriever
 from ..tools import analyze_bearing_signal
 from .policy import should_run_diagnosis
-from .knowledge_answer import build_full_rag_messages
+from .knowledge_answer import (
+    build_citation_retry_messages,
+    build_full_rag_messages,
+    render_extractive_fallback,
+    validate_answer_citations,
+)
 from .reporting import render_diagnosis_report
 from .safety import assess_high_risk_question
 
@@ -202,7 +207,34 @@ def build_graph(settings: Settings | None = None):
                 ]
             }
         response = llm.invoke(build_full_rag_messages(user_text, hits))
-        return {"messages": [response]}
+        validation = validate_answer_citations(str(response.content), hits)
+        generation_path = "first_pass"
+        attempts = 1
+        if not validation["valid"]:
+            response = llm.invoke(
+                build_citation_retry_messages(user_text, hits, str(response.content))
+            )
+            validation = validate_answer_citations(str(response.content), hits)
+            generation_path = "retry"
+            attempts = 2
+
+        content = str(response.content)
+        if not validation["valid"]:
+            content = render_extractive_fallback(hits)
+            validation = validate_answer_citations(content, hits)
+            generation_path = "extractive_fallback"
+
+        response_metadata = dict(getattr(response, "response_metadata", None) or {})
+        response_metadata["equipdoc_answer_guard"] = {
+            "generation_path": generation_path,
+            "generation_attempts": attempts,
+            "final_citation_validation": validation,
+        }
+        message_kwargs = {"content": content, "response_metadata": response_metadata}
+        usage_metadata = getattr(response, "usage_metadata", None)
+        if usage_metadata:
+            message_kwargs["usage_metadata"] = usage_metadata
+        return {"messages": [AIMessage(**message_kwargs)]}
 
     def should_continue(state: AgentState):
         last_message = state.get("messages", [])[-1]

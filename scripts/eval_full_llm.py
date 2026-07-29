@@ -145,6 +145,12 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "average_keyword_recall": mean(items, "keyword_recall"),
             "forbidden_claim_absence_rate": rate(items, "forbidden_claims_ok"),
             "citation_validity_rate": rate(items, "citations_valid"),
+            "claim_level_citation_compliance_rate": rate(
+                items, "claim_level_citations_ok"
+            ),
+            "average_claim_citation_coverage": mean(
+                items, "claim_citation_coverage"
+            ),
             "reference_doc_hit_rate": rate(items, "reference_doc_hit"),
         }
 
@@ -233,6 +239,7 @@ def main() -> None:
             usage = _usage(message)
             response_metadata = getattr(message, "response_metadata", None) or {}
             guard = response_metadata.get("equipdoc_answer_guard") or {}
+            claim_validation = guard.get("final_citation_validation") or {}
             generation_path = guard.get("generation_path", "untracked")
             generation_attempts = guard.get("generation_attempts")
             llm_called = bool(usage) or bool(
@@ -252,6 +259,8 @@ def main() -> None:
                 claim in answer for claim in case.get("forbidden_claims", [])
             )
             citations_valid = bool(citations) and all(citation_checks)
+            claim_level_citations_ok = bool(claim_validation.get("valid"))
+            claim_citation_coverage = claim_validation.get("claim_citation_coverage")
             reference_doc_hit = bool(
                 {doc_id for doc_id, _ in citations}.intersection(case["reference_doc_ids"])
             )
@@ -262,6 +271,7 @@ def main() -> None:
                 and keyword_recall >= 0.5
                 and forbidden_claims_ok
                 and citations_valid
+                and claim_level_citations_ok
                 and reference_doc_hit
             )
             used_extractive_fallback = generation_path == "extractive_fallback"
@@ -278,6 +288,8 @@ def main() -> None:
             keyword_recall = 0.0
             forbidden_claims_ok = False
             citations_valid = False
+            claim_level_citations_ok = False
+            claim_citation_coverage = 0.0
             reference_doc_hit = False
             success = False
             llm_called = False
@@ -302,6 +314,8 @@ def main() -> None:
                 "keyword_recall": keyword_recall,
                 "forbidden_claims_ok": forbidden_claims_ok,
                 "citations_valid": citations_valid,
+                "claim_level_citations_ok": claim_level_citations_ok,
+                "claim_citation_coverage": claim_citation_coverage,
                 "reference_doc_hit": reference_doc_hit,
                 "generation_path": generation_path,
                 "generation_attempts": generation_attempts,
@@ -325,12 +339,12 @@ def main() -> None:
             break
 
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "evaluation_contract": {
             "mode": "Full mode with a real OpenAI-compatible local Qwen service",
-            "quality_gate": "keyword recall >= 0.5, valid citation, reference hit, no listed forbidden claim",
-            "answer_guard": "one citation-constrained retry, then exact extractive fallback",
+            "quality_gate": "keyword recall >= 0.5, valid claim-level citations, reference hit, no listed forbidden claim",
+            "answer_guard": "one sentence-level citation-constrained retry, then exact extractive fallback",
             "latency_scope": "serial end-to-end graph invocation after one warmup",
             "not_measured": [
                 "concurrent throughput",
@@ -369,6 +383,7 @@ def main() -> None:
             "llm_answer_passed",
             "generation_path",
             "keyword_recall",
+            "claim_citation_coverage",
             "citations",
             "human_groundedness_0_or_1",
             "human_answer_correct_0_or_1",
@@ -388,6 +403,7 @@ def main() -> None:
                         "llm_answer_passed": row["llm_answer_passed"],
                         "generation_path": row["generation_path"],
                         "keyword_recall": row["keyword_recall"],
+                        "claim_citation_coverage": row["claim_citation_coverage"],
                         "citations": ";".join(row["citations"]),
                         "human_groundedness_0_or_1": "",
                         "human_answer_correct_0_or_1": "",

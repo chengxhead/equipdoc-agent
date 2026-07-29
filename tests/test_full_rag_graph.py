@@ -71,6 +71,41 @@ class FullRagGraphTests(unittest.TestCase):
         self.assertEqual(llm.invoke.call_count, 2)
         self.assertEqual(guard["generation_path"], "retry")
 
+    def test_single_trailing_citation_for_multiple_claims_triggers_retry(self):
+        with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
+            llm = chat_class.return_value
+            llm.invoke.side_effect = [
+                AIMessage(
+                    content=(
+                        "外圈随轴承座一起转动。"
+                        "外圈缺陷产生冲击 "
+                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+                    )
+                ),
+                AIMessage(
+                    content=(
+                        "外圈缺陷产生周期性冲击 "
+                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+                    )
+                ),
+            ]
+            graph = build_graph(self._settings())
+            result = graph.invoke(
+                {
+                    "messages": [HumanMessage(content="轴承外圈故障有什么特征？")],
+                    "signal_path": "",
+                },
+                config={"configurable": {"thread_id": "test_full_claim_coverage"}},
+            )
+
+        final = result["messages"][-1]
+        guard = final.response_metadata["equipdoc_answer_guard"]
+        self.assertEqual(llm.invoke.call_count, 2)
+        self.assertEqual(guard["generation_path"], "retry")
+        self.assertEqual(
+            guard["final_citation_validation"]["claim_citation_coverage"], 1.0
+        )
+
     def test_second_invalid_answer_uses_extractive_fallback(self):
         with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
             llm = chat_class.return_value

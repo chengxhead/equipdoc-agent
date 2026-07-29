@@ -55,6 +55,28 @@ class KnowledgeAnswerTests(unittest.TestCase):
         self.assertTrue(validate_answer_citations(fallback, self.hits)["valid"])
         self.assertIn("系统已隐藏未验证草稿", fallback)
 
+    def test_one_trailing_citation_cannot_cover_multiple_sentences(self):
+        answer = (
+            "外圈缺陷会产生周期性冲击。"
+            "每转只重复一次 [bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+        )
+        validation = validate_answer_citations(answer, self.hits)
+        self.assertFalse(validation["valid"])
+        self.assertEqual(validation["claim_count"], 2)
+        self.assertEqual(validation["cited_claim_count"], 1)
+        self.assertEqual(validation["claim_citation_coverage"], 0.5)
+
+    def test_each_claim_with_allowed_citation_is_valid(self):
+        answer = (
+            "- 外圈缺陷会产生周期性冲击 "
+            "[bearing_outer_race_fault#bearing_outer_race_fault_c001]\n"
+            "- 冲击呈现稳定重复模式 "
+            "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+        )
+        validation = validate_answer_citations(answer, self.hits)
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["claim_citation_coverage"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -135,8 +135,8 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "llm_invocation_rate": rate(items, "llm_called"),
             "case_pass_rate": rate(items, "passed"),
             "llm_answer_pass_rate": rate(items, "llm_answer_passed"),
-            "first_pass_citation_compliance_rate": rate(
-                items, "first_pass_citation_compliant"
+            "first_pass_evidence_selection_rate": rate(
+                items, "first_pass_evidence_selection_ok"
             ),
             "retry_recovery_rate": (
                 rate(retried, "retry_recovered") if retried else None
@@ -246,8 +246,11 @@ def main() -> None:
             response_metadata = getattr(message, "response_metadata", None) or {}
             guard = response_metadata.get("equipdoc_answer_guard") or {}
             claim_validation = guard.get("final_citation_validation") or {}
+            selection_validation = guard.get("selection_validation") or {}
             generation_path = guard.get("generation_path", "untracked")
             generation_attempts = guard.get("generation_attempts")
+            model_selected_evidence_ids = selection_validation.get("selected_ids") or []
+            model_evidence_selection_valid = bool(selection_validation.get("valid"))
             llm_called = bool(usage) or bool(
                 response_metadata.get("model_name")
                 or response_metadata.get("model")
@@ -284,7 +287,7 @@ def main() -> None:
                 and reference_doc_hit
             )
             used_extractive_fallback = generation_path == "extractive_fallback"
-            first_pass_citation_compliant = generation_path == "first_pass"
+            first_pass_evidence_selection_ok = generation_path == "first_pass"
             retry_recovered = generation_path == "retry"
             llm_answer_passed = passed and not used_extractive_fallback
             error = None
@@ -306,8 +309,10 @@ def main() -> None:
             llm_called = False
             generation_path = "error"
             generation_attempts = 0
+            model_selected_evidence_ids = []
+            model_evidence_selection_valid = False
             used_extractive_fallback = False
-            first_pass_citation_compliant = False
+            first_pass_evidence_selection_ok = False
             retry_recovered = False
             llm_answer_passed = False
             passed = False
@@ -332,7 +337,9 @@ def main() -> None:
                 "reference_doc_hit": reference_doc_hit,
                 "generation_path": generation_path,
                 "generation_attempts": generation_attempts,
-                "first_pass_citation_compliant": first_pass_citation_compliant,
+                "model_selected_evidence_ids": model_selected_evidence_ids,
+                "model_evidence_selection_valid": model_evidence_selection_valid,
+                "first_pass_evidence_selection_ok": first_pass_evidence_selection_ok,
                 "retry_recovered": retry_recovered,
                 "used_extractive_fallback": used_extractive_fallback,
                 "citations": [f"{doc_id}#{chunk_id}" for doc_id, chunk_id in citations],
@@ -352,12 +359,12 @@ def main() -> None:
             break
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "evaluation_contract": {
             "mode": "Full mode with a real OpenAI-compatible local Qwen service",
             "quality_gate": "all required keywords present, valid claim-level citations, exact cited-evidence match, reference hit, no listed forbidden claim",
-            "answer_guard": "one exact-evidence citation retry, then exact extractive fallback",
+            "answer_guard": "LLM selects 2-5 evidence sentence IDs; system renders exact cited text; one retry then lexical fallback",
             "latency_scope": "serial end-to-end graph invocation after one warmup",
             "not_measured": [
                 "concurrent throughput",
@@ -395,6 +402,7 @@ def main() -> None:
             "auto_passed",
             "llm_answer_passed",
             "generation_path",
+            "model_selected_evidence_ids",
             "keyword_recall",
             "claim_citation_coverage",
             "claim_evidence_match_rate",
@@ -416,6 +424,9 @@ def main() -> None:
                         "auto_passed": row["passed"],
                         "llm_answer_passed": row["llm_answer_passed"],
                         "generation_path": row["generation_path"],
+                        "model_selected_evidence_ids": ";".join(
+                            row["model_selected_evidence_ids"]
+                        ),
                         "keyword_recall": row["keyword_recall"],
                         "claim_citation_coverage": row["claim_citation_coverage"],
                         "claim_evidence_match_rate": row["claim_evidence_match_rate"],

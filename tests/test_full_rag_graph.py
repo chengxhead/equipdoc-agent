@@ -6,6 +6,7 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage, HumanMessage
 
 from equipdoc_agent.agent import build_graph
+from equipdoc_agent.agent.graph import _knowledge_filter
 from equipdoc_agent.config import Settings
 
 
@@ -20,16 +21,15 @@ class FullRagGraphTests(unittest.TestCase):
             rag_db_dir=(ROOT / "runtime/test_full_no_vector_db").resolve(),
         )
 
+    def test_focus_filter_uses_primary_fault_mentioned_first(self):
+        filters = _knowledge_filter("为什么滚动体故障的频谱比外圈故障复杂？")
+        self.assertEqual(filters, {"equipment": "bearing", "fault_type": "ball"})
+
     def test_full_knowledge_question_sends_retrieved_evidence_to_llm(self):
         settings = self._settings()
         with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
             llm = chat_class.return_value
-            llm.invoke.return_value = AIMessage(
-                content=(
-                    "当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关 "
-                    "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
-                )
-            )
+            llm.invoke.return_value = AIMessage(content="EVIDENCE_IDS: E01,E02")
             graph = build_graph(settings)
             result = graph.invoke(
                 {
@@ -41,21 +41,17 @@ class FullRagGraphTests(unittest.TestCase):
 
         prompt_messages = llm.invoke.call_args.args[0]
         combined_prompt = "\n".join(str(message.content) for message in prompt_messages)
-        self.assertIn("bearing_outer_race_fault#", combined_prompt)
-        self.assertIn("检索证据", combined_prompt)
+        self.assertIn("EVIDENCE_IDS", combined_prompt)
+        self.assertIn("候选证据句", combined_prompt)
+        self.assertIn("BPFO", combined_prompt)
         self.assertIn("周期性冲击", result["messages"][-1].content)
 
-    def test_missing_citation_triggers_one_retry(self):
+    def test_missing_evidence_ids_triggers_one_retry(self):
         with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
             llm = chat_class.return_value
             llm.invoke.side_effect = [
-                AIMessage(content="没有引用的第一版"),
-                AIMessage(
-                    content=(
-                        "当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关 "
-                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
-                    )
-                ),
+                AIMessage(content="没有证据ID的第一版"),
+                AIMessage(content="EVIDENCE_IDS: E01,E02"),
             ]
             graph = build_graph(self._settings())
             result = graph.invoke(
@@ -71,23 +67,12 @@ class FullRagGraphTests(unittest.TestCase):
         self.assertEqual(llm.invoke.call_count, 2)
         self.assertEqual(guard["generation_path"], "retry")
 
-    def test_single_trailing_citation_for_multiple_claims_triggers_retry(self):
+    def test_unknown_evidence_id_triggers_retry(self):
         with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
             llm = chat_class.return_value
             llm.invoke.side_effect = [
-                AIMessage(
-                    content=(
-                        "外圈随轴承座一起转动。"
-                        "外圈缺陷产生冲击 "
-                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
-                    )
-                ),
-                AIMessage(
-                    content=(
-                        "当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关 "
-                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
-                    )
-                ),
+                AIMessage(content="EVIDENCE_IDS: E98,E99"),
+                AIMessage(content="EVIDENCE_IDS: E01,E02"),
             ]
             graph = build_graph(self._settings())
             result = graph.invoke(
@@ -95,7 +80,7 @@ class FullRagGraphTests(unittest.TestCase):
                     "messages": [HumanMessage(content="轴承外圈故障有什么特征？")],
                     "signal_path": "",
                 },
-                config={"configurable": {"thread_id": "test_full_claim_coverage"}},
+                config={"configurable": {"thread_id": "test_full_selection"}},
             )
 
         final = result["messages"][-1]
@@ -110,8 +95,8 @@ class FullRagGraphTests(unittest.TestCase):
         with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
             llm = chat_class.return_value
             llm.invoke.side_effect = [
-                AIMessage(content="第一版没有引用"),
-                AIMessage(content="第二版仍然没有引用"),
+                AIMessage(content="第一版没有证据ID"),
+                AIMessage(content="第二版仍然没有证据ID"),
             ]
             graph = build_graph(self._settings())
             result = graph.invoke(
@@ -126,7 +111,7 @@ class FullRagGraphTests(unittest.TestCase):
         guard = final.response_metadata["equipdoc_answer_guard"]
         self.assertEqual(guard["generation_path"], "extractive_fallback")
         self.assertIn("回答降级", final.content)
-        self.assertNotIn("第二版仍然没有引用", final.content)
+        self.assertNotIn("第二版仍然没有证据ID", final.content)
 
 
 if __name__ == "__main__":

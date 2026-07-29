@@ -164,7 +164,7 @@ EQUIPDOC_LLM_API_KEY=EMPTY
 
 Qwen 服务应提供 OpenAI-compatible `/chat/completions` 接口。模型继续保留在 AutoDL，不应把大模型权重上传 GitHub。
 
-Full 模式的知识问答会先检索公开知识切片，再把证据与完整 `doc_id#chunk_id` 交给 Qwen。高保证回答守卫要求每条技术陈述逐字摘录一条检索证据并在句末引用；首轮不合格时重试一次，再失败则隐藏草稿并返回带逐句引用的抽取式证据。真实模型的20条质量与p50/p95延迟评测流程见 [`docs/p2-autodl-full-evaluation.md`](docs/p2-autodl-full-evaluation.md)。在 AutoDL 结果回传前，仓库不预先声明 Full 模式性能。
+Full 模式的知识问答会先做聚焦检索，再由 Qwen 从候选证据句中选择2至5个ID，最终答案与 `doc_id#chunk_id` 引用由系统确定性渲染。模型首轮选择不合格时重试一次，再失败才按词法相关性返回最多5条原文。真实模型的20条质量与p50/p95延迟评测流程见 [`docs/p2-autodl-full-evaluation.md`](docs/p2-autodl-full-evaluation.md)。在 AutoDL 结果回传前，仓库不预先声明 Full 模式性能。
 
 ### 4. 可选：构建向量库
 

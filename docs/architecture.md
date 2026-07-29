@@ -27,7 +27,7 @@ flowchart LR
 ### Full mode
 
 - connects to an OpenAI-compatible model service;
-- injects retrieved chunks into knowledge-answer prompts and requires `doc_id#chunk_id` citations;
+- applies focused retrieval for explicit equipment/fault terms, asks Qwen to select evidence sentence IDs, and deterministically renders exact text with `doc_id#chunk_id` citations;
 - loads the bearing CNN lazily on the first tool call;
 - optionally adds Chroma dense retrieval;
 - refuses startup through `equipdoc-health --strict` when required artifacts are absent.

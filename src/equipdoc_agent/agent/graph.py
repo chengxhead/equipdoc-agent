@@ -18,10 +18,14 @@ from ..rag import KnowledgeRetriever
 from ..tools import analyze_bearing_signal
 from .policy import should_run_diagnosis
 from .knowledge_answer import (
+    build_evidence_candidates,
     build_citation_retry_messages,
     build_full_rag_messages,
+    extract_evidence_selection,
     render_extractive_fallback,
+    render_selected_evidence,
     validate_answer_citations,
+    validate_evidence_selection,
 )
 from .reporting import render_diagnosis_report
 from .safety import assess_high_risk_question
@@ -58,6 +62,27 @@ def _fault_filter(fault_type: str) -> dict[str, str] | None:
     if "滚动体" in fault_type:
         return {"equipment": "bearing", "fault_type": "ball"}
     return None
+
+
+def _knowledge_filter(question: str) -> dict[str, str] | None:
+    mappings = (
+        ("外圈", {"equipment": "bearing", "fault_type": "outer_race"}),
+        ("内圈", {"equipment": "bearing", "fault_type": "inner_race"}),
+        ("滚动体", {"equipment": "bearing", "fault_type": "ball"}),
+        ("保持架", {"equipment": "bearing", "fault_type": "cage"}),
+        ("CWRU", {"equipment": "bearing", "fault_type": "dataset"}),
+        ("动力电池", {"equipment": "traction_battery"}),
+        ("BMS", {"equipment": "traction_battery"}),
+        ("管道", {"equipment": "pipeline"}),
+        ("汽蚀", {"equipment": "pump_gearbox"}),
+        ("齿轮", {"equipment": "pump_gearbox"}),
+    )
+    matches = [
+        (question.find(keyword), filters)
+        for keyword, filters in mappings
+        if keyword in question
+    ]
+    return min(matches, key=lambda item: item[0])[1] if matches else None
 
 
 def _review_call_payload(call: dict) -> dict:
@@ -194,7 +219,16 @@ def build_graph(settings: Settings | None = None):
 
         assert llm is not None
         retriever = get_retriever()
-        hits = retriever.search(user_text, top_k=5) if retriever and user_text else []
+        hits = []
+        if retriever and user_text:
+            filters = _knowledge_filter(user_text)
+            if filters:
+                hits.extend(retriever.search(user_text, filters=filters, top_k=3))
+            hits.extend(retriever.search(user_text, top_k=5))
+            unique_hits = {}
+            for item in hits:
+                unique_hits[item.get("chunk_id")] = item
+            hits = list(unique_hits.values())[:5]
         if not hits:
             return {
                 "messages": [
@@ -206,28 +240,33 @@ def build_graph(settings: Settings | None = None):
                     )
                 ]
             }
+        candidates = build_evidence_candidates(hits)
         response = llm.invoke(build_full_rag_messages(user_text, hits))
-        validation = validate_answer_citations(str(response.content), hits)
+        selected_ids = extract_evidence_selection(str(response.content))
+        selection_validation = validate_evidence_selection(selected_ids, candidates)
         generation_path = "first_pass"
         attempts = 1
-        if not validation["valid"]:
+        if not selection_validation["valid"]:
             response = llm.invoke(
                 build_citation_retry_messages(user_text, hits, str(response.content))
             )
-            validation = validate_answer_citations(str(response.content), hits)
+            selected_ids = extract_evidence_selection(str(response.content))
+            selection_validation = validate_evidence_selection(selected_ids, candidates)
             generation_path = "retry"
             attempts = 2
 
-        content = str(response.content)
-        if not validation["valid"]:
-            content = render_extractive_fallback(hits)
-            validation = validate_answer_citations(content, hits)
+        if selection_validation["valid"]:
+            content = render_selected_evidence(candidates, selected_ids)
+        else:
+            content = render_extractive_fallback(hits, question=user_text)
             generation_path = "extractive_fallback"
+        validation = validate_answer_citations(content, hits)
 
         response_metadata = dict(getattr(response, "response_metadata", None) or {})
         response_metadata["equipdoc_answer_guard"] = {
             "generation_path": generation_path,
             "generation_attempts": attempts,
+            "selection_validation": selection_validation,
             "final_citation_validation": validation,
         }
         message_kwargs = {"content": content, "response_metadata": response_metadata}

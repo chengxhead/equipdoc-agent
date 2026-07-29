@@ -5,6 +5,21 @@ import time
 import uuid
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str | None = ""
+
+
+class ChatRequest(BaseModel):
+    model: str
+    messages: list[ChatMessage]
+    temperature: float = 0.0
+    top_p: float = 0.9
+    max_tokens: int = Field(default=512, ge=1, le=2048)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Serve a local Qwen model with a minimal OpenAI API.")
@@ -23,23 +38,11 @@ def main() -> None:
         import torch
         import uvicorn
         from fastapi import FastAPI, HTTPException
-        from pydantic import BaseModel, Field
         from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError as exc:
         raise SystemExit(
             "Install torch, transformers, accelerate, fastapi and uvicorn in the AutoDL environment."
         ) from exc
-
-    class ChatMessage(BaseModel):
-        role: str
-        content: str | None = ""
-
-    class ChatRequest(BaseModel):
-        model: str
-        messages: list[ChatMessage]
-        temperature: float = 0.0
-        top_p: float = 0.9
-        max_tokens: int = Field(default=512, ge=1, le=2048)
 
     dtype = {
         "auto": "auto",

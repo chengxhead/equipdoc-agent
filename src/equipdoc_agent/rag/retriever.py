@@ -204,8 +204,24 @@ class KnowledgeRetriever:
             chunk_id = item["chunk_id"]
             merged.setdefault(chunk_id, {}).update(item)
             merged[chunk_id]["rrf_score"] = scores.get(chunk_id, 0.0)
-        return sorted(
+        ranked = sorted(
             merged.values(),
             key=lambda item: item.get("rrf_score", 0.0),
             reverse=True,
-        )[:final_k]
+        )
+        selected = []
+        per_doc: dict[str, int] = {}
+        for item in ranked:
+            doc_id = str(item.get("doc_id", ""))
+            if per_doc.get(doc_id, 0) >= 2:
+                continue
+            selected.append(item)
+            per_doc[doc_id] = per_doc.get(doc_id, 0) + 1
+            if len(selected) >= final_k:
+                break
+        if len(selected) < final_k:
+            selected_ids = {item.get("chunk_id") for item in selected}
+            selected.extend(
+                item for item in ranked if item.get("chunk_id") not in selected_ids
+            )
+        return selected[:final_k]

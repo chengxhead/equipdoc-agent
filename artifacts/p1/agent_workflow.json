@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "created_at": "2026-07-28T13:54:18+00:00",
+  "created_at": "2026-07-29T05:20:37+00:00",
   "evaluation_contract": {
     "mode": "model-free Demo",
     "routing": "deterministic policy with an explicit safe signal fixture",
@@ -17,12 +17,12 @@
   "summary": {
     "overall": {
       "count": 30,
-      "case_pass_rate": 0.8666666666666667,
+      "case_pass_rate": 1.0,
       "deterministic_route_accuracy": 1.0,
       "review_gate_coverage": 1.0,
       "review_payload_privacy_rate": 1.0,
       "branch_compliance_rate": 1.0,
-      "knowledge_keyword_case_pass_rate": 0.6
+      "knowledge_keyword_case_pass_rate": 1.0
     },
     "by_group": {
       "approve_branch": {
@@ -36,12 +36,12 @@
       },
       "knowledge_only": {
         "count": 10,
-        "case_pass_rate": 0.6,
+        "case_pass_rate": 1.0,
         "deterministic_route_accuracy": 1.0,
         "review_gate_coverage": 1.0,
         "review_payload_privacy_rate": 1.0,
         "branch_compliance_rate": null,
-        "knowledge_keyword_case_pass_rate": 0.6
+        "knowledge_keyword_case_pass_rate": 1.0
       },
       "reject_branch": {
         "count": 5,
@@ -315,7 +315,7 @@
       "branch_ok": null,
       "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- bearing_outer_race_fault#bearing_outer_race_fault_c001：轴承外圈故障通常与外圈滚道局部剥落、点蚀、裂纹或安装座支撑刚度异常有关。当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关。外圈故障位置相对固定，因此在稳定转速下，振动信号中往往会出现较稳定的冲击重复模式。\n\n外圈故障不应只凭单个频谱峰值判断。工程上通常需要结合时域冲击、频域故障特征频率、包络谱峰值、边频带以及工况信息共同分析。若负\n- bearing_outer_race_fault#bearing_outer_race_fault_c002：外圈故障常见表现包括：时域信号出现周期性冲击，频域中外圈故障特征频率及其倍频附近能量增强，包络谱中 BPFO 附近峰值更明显。若故障较严重，可能出现宽带冲击能量升高、峭度增大和高频共振带增强。\n\n诊断时需要注意区分外圈故障与安装松动、基础共振、传感器固定不良等问题。松动类问题也可能产生冲击和倍频成分，但通常伴随更明显的低频倍频、非稳定冲击或工况相关性。\n- bearing_outer_race_fault#bearing_outer_race_fault_c003：若模型诊断为外圈故障且置信度较高，建议先复核采样点、转速、负载和传感器安装状态，再进行现场检查。维护措施包括检查轴承座配合、润滑状态、外圈滚道磨损、异常温升和噪声。若冲击能量持续升高或伴随温度异常，应安排停机检查或更换轴承。\n\n报告中应明确风险提示：基于单段振动信号的诊断不能替代现场拆检，尤其不能直接推断剩余寿命。若需要寿命预测，还需要长期趋势数据、载荷谱和\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [bearing_outer_race_fault#bearing_outer_race_fault_c001]：轴承外圈故障通常与外圈滚道局部剥落、点蚀、裂纹或安装座支撑刚度异常有关。当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关。外圈故障位置相对固定，因此在稳定转速下，振动信号中往往会出现较稳定的冲击重复模式。  外圈故障不应只凭单个频谱峰值判断。工程上通常需要结合时域冲击、频域故障特征频率、包络谱峰值、边频带以及工况信息共同分析。若负\n- [bearing_outer_race_fault#bearing_outer_race_fault_c002]：外圈故障常见表现包括：时域信号出现周期性冲击，频域中外圈故障特征频率及其倍频附近能量增强，包络谱中 BPFO 附近峰值更明显。若故障较严重，可能出现宽带冲击能量升高、峭度增大和高频共振带增强。  诊断时需要注意区分外圈故障与安装松动、基础共振、传感器固定不良等问题。松动类问题也可能产生冲击和倍频成分，但通常伴随更明显的低频倍频、非稳定冲击或工况相关性。\n- [cwru_dataset_notes#cwru_dataset_notes_c001]：CWRU 轴承数据集是轴承故障诊断研究中常用的公开数据集，通常包含正常、内圈故障、外圈故障和滚动体故障等类别。数据来自实验台架，常用于验证振动信号诊断模型、特征提取方法和分类算法。  在项目中，CWRU 数据集适合用于验证诊断工具链路：输入一段振动信号，模型输出故障类别、置信度和类别概率。若轻量 CNN 在 CWRU 测试集上达到高准确率，能说明该工具在这个\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_02",
@@ -328,7 +328,7 @@
       "branch_ok": null,
       "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- cwru_dataset_notes#cwru_dataset_notes_c001：CWRU 轴承数据集是轴承故障诊断研究中常用的公开数据集，通常包含正常、内圈故障、外圈故障和滚动体故障等类别。数据来自实验台架，常用于验证振动信号诊断模型、特征提取方法和分类算法。\n\n在项目中，CWRU 数据集适合用于验证诊断工具链路：输入一段振动信号，模型输出故障类别、置信度和类别概率。若轻量 CNN 在 CWRU 测试集上达到高准确率，能说明该工具在这个\n- bearing_ball_fault#bearing_ball_fault_c001：滚动体故障主要包括滚动体表面点蚀、剥落、裂纹和局部磨损。滚动体既自转又随保持架公转，接触内外圈时受力状态不断变化，因此振动信号往往比单纯外圈故障更复杂。\n\n滚动体故障常与 BSF 相关，但工程上不能只看 BSF 单一峰值。由于滚动体运动复杂，信号中可能同时出现调制、倍频、边频带和高频冲击增强。\n- bearing_ball_fault#bearing_ball_fault_c002：滚动体故障可能表现为冲击成分增强、包络谱中 BSF 及其倍频附近能量升高、频谱结构不如外圈故障稳定。若缺陷发展严重，时域冲击会更加随机，峭度和峰值因子可能升高。\n\n滚动体故障容易与润滑不良、异物污染、保持架异常混淆。若模型输出滚动体故障但置信度不高，应结合润滑油状态、噪声、温度和多传感器数据复核。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [cwru_dataset_notes#cwru_dataset_notes_c001]：CWRU 轴承数据集是轴承故障诊断研究中常用的公开数据集，通常包含正常、内圈故障、外圈故障和滚动体故障等类别。数据来自实验台架，常用于验证振动信号诊断模型、特征提取方法和分类算法。  在项目中，CWRU 数据集适合用于验证诊断工具链路：输入一段振动信号，模型输出故障类别、置信度和类别概率。若轻量 CNN 在 CWRU 测试集上达到高准确率，能说明该工具在这个\n- [bearing_ball_fault#bearing_ball_fault_c001]：滚动体故障主要包括滚动体表面点蚀、剥落、裂纹和局部磨损。滚动体既自转又随保持架公转，接触内外圈时受力状态不断变化，因此振动信号往往比单纯外圈故障更复杂。  滚动体故障常与 BSF 相关，但工程上不能只看 BSF 单一峰值。由于滚动体运动复杂，信号中可能同时出现调制、倍频、边频带和高频冲击增强。\n- [bearing_ball_fault#bearing_ball_fault_c002]：滚动体故障可能表现为冲击成分增强、包络谱中 BSF 及其倍频附近能量升高、频谱结构不如外圈故障稳定。若缺陷发展严重，时域冲击会更加随机，峭度和峰值因子可能升高。  滚动体故障容易与润滑不良、异物污染、保持架异常混淆。若模型输出滚动体故障但置信度不高，应结合润滑油状态、噪声、温度和多传感器数据复核。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_03",
@@ -341,7 +341,7 @@
       "branch_ok": null,
       "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- cwru_dataset_notes#cwru_dataset_notes_c001：CWRU 轴承数据集是轴承故障诊断研究中常用的公开数据集，通常包含正常、内圈故障、外圈故障和滚动体故障等类别。数据来自实验台架，常用于验证振动信号诊断模型、特征提取方法和分类算法。\n\n在项目中，CWRU 数据集适合用于验证诊断工具链路：输入一段振动信号，模型输出故障类别、置信度和类别概率。若轻量 CNN 在 CWRU 测试集上达到高准确率，能说明该工具在这个\n- pump_gearbox_faults#pump_gearbox_faults_c002：当当前工具只有轴承 CNN 时，系统可以提示泵或齿轮箱可能需要专用工具，不应把所有异常都归因于轴承故障。RAG 的作用是给出诊断边界和下一步数据需求。\n- motor_faults#motor_faults_c001：电机常见故障包括转子不平衡、不对中、轴承损伤、定转子摩擦、绕组绝缘异常和冷却不良。振动信号常用于识别机械类故障，温度、电流和绝缘监测更适合辅助判断电气类问题。\n\n不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征。若电机温升明显，还需要检查负载、散热、润滑和电气状态。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [cwru_dataset_notes#cwru_dataset_notes_c001]：CWRU 轴承数据集是轴承故障诊断研究中常用的公开数据集，通常包含正常、内圈故障、外圈故障和滚动体故障等类别。数据来自实验台架，常用于验证振动信号诊断模型、特征提取方法和分类算法。  在项目中，CWRU 数据集适合用于验证诊断工具链路：输入一段振动信号，模型输出故障类别、置信度和类别概率。若轻量 CNN 在 CWRU 测试集上达到高准确率，能说明该工具在这个\n- [pump_gearbox_faults#pump_gearbox_faults_c003]：当当前工具只有轴承 CNN 时，系统可以提示泵或齿轮箱可能需要专用工具，不应把所有异常都归因于轴承故障。RAG 的作用是给出诊断边界和下一步数据需求。\n- [motor_faults#motor_faults_c001]：电机常见故障包括转子不平衡、不对中、轴承损伤、定转子摩擦、绕组绝缘异常和冷却不良。振动信号常用于识别机械类故障，温度、电流和绝缘监测更适合辅助判断电气类问题。  不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征。若电机温升明显，还需要检查负载、散热、润滑和电气状态。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_04",
@@ -354,20 +354,20 @@
       "branch_ok": null,
       "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- motor_faults#motor_faults_c001：电机常见故障包括转子不平衡、不对中、轴承损伤、定转子摩擦、绕组绝缘异常和冷却不良。振动信号常用于识别机械类故障，温度、电流和绝缘监测更适合辅助判断电气类问题。\n\n不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征。若电机温升明显，还需要检查负载、散热、润滑和电气状态。\n- motor_faults#motor_faults_c002：若只有振动信号，报告应优先描述机械故障风险，不应直接判断绕组绝缘击穿。若用户询问电气故障但资料库和输入信号不足，应提示需要补充电流、温度或绝缘测试数据。\n- pump_gearbox_faults#pump_gearbox_faults_c001：泵类设备常见问题包括气蚀、轴承磨损、不对中、叶轮不平衡和基础松动。气蚀可能表现为宽带噪声、振动升高和流量压力波动，不能仅凭轴承分类模型判断。\n\n齿轮箱故障常涉及齿轮啮合频率、边频带、齿面磨损、断齿和轴承问题。齿轮故障诊断需要齿数、转速和传动级信息，否则很难准确解释啮合频率。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [motor_faults#motor_faults_c001]：电机常见故障包括转子不平衡、不对中、轴承损伤、定转子摩擦、绕组绝缘异常和冷却不良。振动信号常用于识别机械类故障，温度、电流和绝缘监测更适合辅助判断电气类问题。  不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征。若电机温升明显，还需要检查负载、散热、润滑和电气状态。\n- [motor_faults#motor_faults_c002]：若只有振动信号，报告应优先描述机械故障风险，不应直接判断绕组绝缘击穿。若用户询问电气故障但资料库和输入信号不足，应提示需要补充电流、温度或绝缘测试数据。\n- [pump_gearbox_faults#pump_gearbox_faults_c001]：泵类设备常见问题包括汽蚀（也常写作气蚀）、轴承磨损、不对中、叶轮不平衡和基础松动。汽蚀可能表现为宽带噪声、振动升高、流量或压力波动，并可能伴随类似砂石通过的异常声音。仍需结合入口压力、流量、工况和泵的专用检测信息，不能仅凭轴承分类模型判断。  齿轮箱故障常涉及齿轮啮合频率、边频带、齿面磨损、断齿和轴承问题。齿轮故障诊断需要齿数、转速和传动级信息，否则很难准确\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_05",
       "group": "knowledge_only",
-      "passed": false,
+      "passed": true,
       "route_ok": true,
       "review_gate_ok": true,
       "tool_name_ok": true,
       "privacy_ok": true,
       "branch_ok": null,
-      "knowledge_keywords_ok": false,
+      "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- bearing_cage_fault#bearing_cage_fault_c003：建议检查润滑状态、保持架磨损、轴承游隙和异常摩擦声。若出现温升、噪声加剧或振动突增，应安排停机拆检。若资料不足，应建议补充采样和现场检查，而不是直接推断故障等级。\n- bearing_cage_fault#bearing_cage_fault_c001：保持架故障包括保持架裂纹、磨损、变形、铆钉松动和润滑不足导致的摩擦异常。保持架转速低于轴转速，因此相关特征常出现在较低频率区域，并可能伴随宽带摩擦噪声。\n\n保持架故障通常不如内外圈故障容易通过单一特征频率稳定识别。实际诊断时需要结合低频调制、冲击、摩擦噪声、温升和拆检信息判断。\n- motor_faults#motor_faults_c001：电机常见故障包括转子不平衡、不对中、轴承损伤、定转子摩擦、绕组绝缘异常和冷却不良。振动信号常用于识别机械类故障，温度、电流和绝缘监测更适合辅助判断电气类问题。\n\n不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征。若电机温升明显，还需要检查负载、散热、润滑和电气状态。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [equipment_temperature_checks#equipment_temperature_checks_c001]：设备点检发现温升异常时，应先确认测温位置、传感器安装、环境温度和历史基线，排除测点变化或传感器漂移。单次温度偏高不能直接等同于轴承故障，需要结合升温速率、负载和持续时间判断。\n- [bearing_cage_fault#bearing_cage_fault_c003]：建议检查润滑状态、保持架磨损、轴承游隙和异常摩擦声。若出现温升、噪声加剧或振动突增，应安排停机拆检。若资料不足，应建议补充采样和现场检查，而不是直接推断故障等级。\n- [equipment_temperature_checks#equipment_temperature_checks_c002]：机械侧应排查轴承润滑不足或过量、游隙和装配异常、对中不良、摩擦加剧、负载突增以及冷却风道堵塞。同步检查振动、噪声、转速和润滑油状态，可以帮助区分持续摩擦与短时工况变化。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_06",
@@ -380,33 +380,33 @@
       "branch_ok": null,
       "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- pump_gearbox_faults#pump_gearbox_faults_c001：泵类设备常见问题包括气蚀、轴承磨损、不对中、叶轮不平衡和基础松动。气蚀可能表现为宽带噪声、振动升高和流量压力波动，不能仅凭轴承分类模型判断。\n\n齿轮箱故障常涉及齿轮啮合频率、边频带、齿面磨损、断齿和轴承问题。齿轮故障诊断需要齿数、转速和传动级信息，否则很难准确解释啮合频率。\n- bearing_ball_fault#bearing_ball_fault_c001：滚动体故障主要包括滚动体表面点蚀、剥落、裂纹和局部磨损。滚动体既自转又随保持架公转，接触内外圈时受力状态不断变化，因此振动信号往往比单纯外圈故障更复杂。\n\n滚动体故障常与 BSF 相关，但工程上不能只看 BSF 单一峰值。由于滚动体运动复杂，信号中可能同时出现调制、倍频、边频带和高频冲击增强。\n- bearing_cage_fault#bearing_cage_fault_c001：保持架故障包括保持架裂纹、磨损、变形、铆钉松动和润滑不足导致的摩擦异常。保持架转速低于轴转速，因此相关特征常出现在较低频率区域，并可能伴随宽带摩擦噪声。\n\n保持架故障通常不如内外圈故障容易通过单一特征频率稳定识别。实际诊断时需要结合低频调制、冲击、摩擦噪声、温升和拆检信息判断。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [pump_gearbox_faults#pump_gearbox_faults_c001]：泵类设备常见问题包括汽蚀（也常写作气蚀）、轴承磨损、不对中、叶轮不平衡和基础松动。汽蚀可能表现为宽带噪声、振动升高、流量或压力波动，并可能伴随类似砂石通过的异常声音。仍需结合入口压力、流量、工况和泵的专用检测信息，不能仅凭轴承分类模型判断。  齿轮箱故障常涉及齿轮啮合频率、边频带、齿面磨损、断齿和轴承问题。齿轮故障诊断需要齿数、转速和传动级信息，否则很难准确\n- [pump_gearbox_faults#pump_gearbox_faults_c003]：当当前工具只有轴承 CNN 时，系统可以提示泵或齿轮箱可能需要专用工具，不应把所有异常都归因于轴承故障。RAG 的作用是给出诊断边界和下一步数据需求。\n- [bearing_ball_fault#bearing_ball_fault_c001]：滚动体故障主要包括滚动体表面点蚀、剥落、裂纹和局部磨损。滚动体既自转又随保持架公转，接触内外圈时受力状态不断变化，因此振动信号往往比单纯外圈故障更复杂。  滚动体故障常与 BSF 相关，但工程上不能只看 BSF 单一峰值。由于滚动体运动复杂，信号中可能同时出现调制、倍频、边频带和高频冲击增强。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_07",
       "group": "knowledge_only",
-      "passed": false,
+      "passed": true,
       "route_ok": true,
       "review_gate_ok": true,
       "tool_name_ok": true,
       "privacy_ok": true,
       "branch_ok": null,
-      "knowledge_keywords_ok": false,
+      "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- bearing_ball_fault#bearing_ball_fault_c002：滚动体故障可能表现为冲击成分增强、包络谱中 BSF 及其倍频附近能量升高、频谱结构不如外圈故障稳定。若缺陷发展严重，时域冲击会更加随机，峭度和峰值因子可能升高。\n\n滚动体故障容易与润滑不良、异物污染、保持架异常混淆。若模型输出滚动体故障但置信度不高，应结合润滑油状态、噪声、温度和多传感器数据复核。\n- bearing_inner_race_fault#bearing_inner_race_fault_c002：内圈故障可能表现为周期性冲击、包络谱中 BPFI 及倍频明显、BPFI 两侧出现转频间隔的边频带。若故障发展到中后期，冲击能量、高频共振和时域峭度可能同时升高。\n\n如果只有单个 BPFI 附近峰值，不能直接给出确定结论。应结合转速、负载、采样频率、传感器方向和历史趋势判断。若边频带不明显，也可能与采样长度不足、转速波动或信噪比较低有关。\n- bearing_outer_race_fault#bearing_outer_race_fault_c002：外圈故障常见表现包括：时域信号出现周期性冲击，频域中外圈故障特征频率及其倍频附近能量增强，包络谱中 BPFO 附近峰值更明显。若故障较严重，可能出现宽带冲击能量升高、峭度增大和高频共振带增强。\n\n诊断时需要注意区分外圈故障与安装松动、基础共振、传感器固定不良等问题。松动类问题也可能产生冲击和倍频成分，但通常伴随更明显的低频倍频、非稳定冲击或工况相关性。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [pump_gearbox_faults#pump_gearbox_faults_c002]：怀疑泵汽蚀时，应核对入口条件、阀门状态、流量压力变化和运行声音，并排查叶轮、不对中和基础松动等替代原因。怀疑齿面磨损时，应结合啮合频率及边频带、润滑油磨粒、齿轮参数和拆检信息复核。\n- [pump_gearbox_faults#pump_gearbox_faults_c001]：泵类设备常见问题包括汽蚀（也常写作气蚀）、轴承磨损、不对中、叶轮不平衡和基础松动。汽蚀可能表现为宽带噪声、振动升高、流量或压力波动，并可能伴随类似砂石通过的异常声音。仍需结合入口压力、流量、工况和泵的专用检测信息，不能仅凭轴承分类模型判断。  齿轮箱故障常涉及齿轮啮合频率、边频带、齿面磨损、断齿和轴承问题。齿轮故障诊断需要齿数、转速和传动级信息，否则很难准确\n- [bearing_ball_fault#bearing_ball_fault_c002]：滚动体故障可能表现为冲击成分增强、包络谱中 BSF 及其倍频附近能量升高、频谱结构不如外圈故障稳定。若缺陷发展严重，时域冲击会更加随机，峭度和峰值因子可能升高。  滚动体故障容易与润滑不良、异物污染、保持架异常混淆。若模型输出滚动体故障但置信度不高，应结合润滑油状态、噪声、温度和多传感器数据复核。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_08",
       "group": "knowledge_only",
-      "passed": false,
+      "passed": true,
       "route_ok": true,
       "review_gate_ok": true,
       "tool_name_ok": true,
       "privacy_ok": true,
       "branch_ok": null,
-      "knowledge_keywords_ok": false,
+      "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- bearing_inner_race_fault#bearing_inner_race_fault_c001：轴承内圈故障常见原因包括内圈滚道剥落、点蚀、裂纹、过盈配合异常和润滑不足。与外圈故障不同，内圈随轴旋转，缺陷进入载荷区时冲击更强，离开载荷区时冲击减弱，因此信号常带有转频调制特征。\n\n内圈故障的诊断应关注内圈故障特征频率 BPFI 及其倍频，也要关注以转频为间隔的边频带。边频带是内圈故障区别于部分外圈故障的重要线索之一。\n- maintenance_decision#maintenance_decision_c001：诊断报告应区分“模型结论”和“维修决策”。模型可以根据振动信号给出故障类别和置信度，但是否停机、更换或继续运行，需要结合设备重要性、负载、温度、噪声、历史趋势和生产风险。\n\n高置信度故障并伴随温升、噪声增大或振动趋势恶化时，应优先安排停机检查。若置信度中等或现场症状不明显，建议复测多段信号，确认传感器安装和采样工况，再决定是否拆检。\n- motor_faults#motor_faults_c001：电机常见故障包括转子不平衡、不对中、轴承损伤、定转子摩擦、绕组绝缘异常和冷却不良。振动信号常用于识别机械类故障，温度、电流和绝缘监测更适合辅助判断电气类问题。\n\n不平衡通常与转频成分增强有关，不对中可能出现转频及倍频成分，轴承故障则可能出现冲击和包络谱特征。若电机温升明显，还需要检查负载、散热、润滑和电气状态。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [battery_thermal_monitoring#battery_thermal_monitoring_c002]：在具备相应传感器时，还可关注异常产气、压力、烟雾或挥发性气体信号，以及冷却系统状态。温度变化、电压异常和气体信号之间的时间关系，比单一阈值更有助于识别风险，但具体阈值必须来自车型、企业规程或经验证的电池系统资料。\n- [battery_thermal_monitoring#battery_thermal_monitoring_c001]：动力电池热风险不能由轴承振动 CNN 判断。早期监测通常需要结合单体温度、温升速率、模组内温差、单体电压一致性、电压异常下降、电流、绝缘状态和 BMS 告警，而不是只看一个温度值。\n- [bearing_inner_race_fault#bearing_inner_race_fault_c001]：轴承内圈故障常见原因包括内圈滚道剥落、点蚀、裂纹、过盈配合异常和润滑不足。与外圈故障不同，内圈随轴旋转，缺陷进入载荷区时冲击更强，离开载荷区时冲击减弱，因此信号常带有转频调制特征。  内圈故障的诊断应关注内圈故障特征频率 BPFI 及其倍频，也要关注以转频为间隔的边频带。边频带是内圈故障区别于部分外圈故障的重要线索之一。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_09",
@@ -419,20 +419,20 @@
       "branch_ok": null,
       "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- vibration_signal_features#vibration_signal_features_c001：轴承振动诊断通常结合时域、频域和包络分析。时域指标包括 RMS、峰值、峰峰值、峭度、偏度和峰值因子。RMS 反映整体能量，峭度对冲击较敏感，峰值因子可提示短时冲击，但这些指标都容易受工况和噪声影响。\n\n频域分析通常使用 FFT 观察特征频率及其倍频。包络谱适合识别调制型冲击，尤其在轴承局部故障中常用。若故障激励了结构高频共振，先做带通滤波再进行包络分析可能更\n- bearing_outer_race_fault#bearing_outer_race_fault_c001：轴承外圈故障通常与外圈滚道局部剥落、点蚀、裂纹或安装座支撑刚度异常有关。当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关。外圈故障位置相对固定，因此在稳定转速下，振动信号中往往会出现较稳定的冲击重复模式。\n\n外圈故障不应只凭单个频谱峰值判断。工程上通常需要结合时域冲击、频域故障特征频率、包络谱峰值、边频带以及工况信息共同分析。若负\n- vibration_signal_features#vibration_signal_features_c002：单一指标不能作为最终诊断依据。RMS 升高可能来自负载变化、安装松动、共振或故障；峭度升高可能来自冲击故障，也可能来自传感器松动或偶发干扰。频谱峰值也需要结合转速和理论特征频率解释。\n\n实际报告应同时给出结论、证据和限制条件。例如：模型识别为外圈故障，依据包括冲击成分增强和外圈特征频率附近能量升高；但由于只分析单段信号，建议结合历史趋势和现场检查复核。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- [vibration_signal_features#vibration_signal_features_c001]：轴承振动诊断通常结合时域、频域和包络分析。时域指标包括 RMS、峰值、峰峰值、峭度、偏度和峰值因子。RMS 反映整体能量，峭度对冲击较敏感，峰值因子可提示短时冲击，但这些指标都容易受工况和噪声影响。  频域分析通常使用 FFT 观察特征频率及其倍频。包络谱适合识别调制型冲击，尤其在轴承局部故障中常用。若故障激励了结构高频共振，先做带通滤波再进行包络分析可能更\n- [bearing_outer_race_fault#bearing_outer_race_fault_c001]：轴承外圈故障通常与外圈滚道局部剥落、点蚀、裂纹或安装座支撑刚度异常有关。当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关。外圈故障位置相对固定，因此在稳定转速下，振动信号中往往会出现较稳定的冲击重复模式。  外圈故障不应只凭单个频谱峰值判断。工程上通常需要结合时域冲击、频域故障特征频率、包络谱峰值、边频带以及工况信息共同分析。若负\n- [vibration_signal_features#vibration_signal_features_c002]：单一指标不能作为最终诊断依据。RMS 升高可能来自负载变化、安装松动、共振或故障；峭度升高可能来自冲击故障，也可能来自传感器松动或偶发干扰。频谱峰值也需要结合转速和理论特征频率解释。  实际报告应同时给出结论、证据和限制条件。例如：模型识别为外圈故障，依据包括冲击成分增强和外圈特征频率附近能量升高；但由于只分析单段信号，建议结合历史趋势和现场检查复核。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
     },
     {
       "id": "knowledge_10",
       "group": "knowledge_only",
-      "passed": false,
+      "passed": true,
       "route_ok": true,
       "review_gate_ok": true,
       "tool_name_ok": true,
       "privacy_ok": true,
       "branch_ok": null,
-      "knowledge_keywords_ok": false,
+      "knowledge_keywords_ok": true,
       "review_payload": null,
-      "final_content": "当前为 Demo 模式，不调用7B模型。以下是词法检索命中的项目知识片段：\n\n- bearing_outer_race_fault#bearing_outer_race_fault_c003：若模型诊断为外圈故障且置信度较高，建议先复核采样点、转速、负载和传感器安装状态，再进行现场检查。维护措施包括检查轴承座配合、润滑状态、外圈滚道磨损、异常温升和噪声。若冲击能量持续升高或伴随温度异常，应安排停机检查或更换轴承。\n\n报告中应明确风险提示：基于单段振动信号的诊断不能替代现场拆检，尤其不能直接推断剩余寿命。若需要寿命预测，还需要长期趋势数据、载荷谱和\n- bearing_cage_fault#bearing_cage_fault_c002：保持架故障可能出现 FTF 及其倍频成分、低频调制、非稳定冲击和摩擦引起的宽带能量升高。若保持架破损严重，可能导致滚动体运动受阻，引发更复杂的冲击模式。\n\n如果仅凭短时振动信号，很难稳定区分保持架故障与润滑不足、轻微松动或异物污染。报告中应避免给出过度确定的结论。\n- bearing_inner_race_fault#bearing_inner_race_fault_c002：内圈故障可能表现为周期性冲击、包络谱中 BPFI 及倍频明显、BPFI 两侧出现转频间隔的边频带。若故障发展到中后期，冲击能量、高频共振和时域峭度可能同时升高。\n\n如果只有单个 BPFI 附近峰值，不能直接给出确定结论。应结合转速、负载、采样频率、传感器方向和历史趋势判断。若边频带不明显，也可能与采样长度不足、转速波动或信噪比较低有关。\n\n完整生成回答需要将 EQUIPDOC_DEMO_MODE 设为 false 并配置模型服务。"
+      "final_content": "## 安全边界（no_signal）\n\n未提供原始振动信号时不能执行轴承诊断工具，也不能给出故障类别；只能提供排查方向和补充数据建议。\n\n## 检索证据\n\n- [rag_safety_rules#rag_safety_rules_c003]：诊断报告中的故障机理、维修建议和风险提示应尽量附带来源 chunk。若检索证据不足，报告应降低结论强度，使用“可能”“建议复核”等表述。\n- [no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c001]：没有采集到原始振动信号时，系统不能执行轴承诊断工具，也不能给出故障类别、类别概率或精确剩余寿命。此时只能依据用户明确提供的现象，给出知识层面的排查方向和需要补充的数据。\n- [no_signal_diagnosis_boundary#no_signal_diagnosis_boundary_c003]：资料不足时不得声称已经诊断出内圈、外圈或滚动体故障，不得编造现场检查结果、维修工单或采样位置。建议先补采多段原始信号、核对传感器安装，并结合现场点检后再判断。\n- [cwru_dataset_notes#cwru_dataset_notes_c001]：CWRU 轴承数据集是轴承故障诊断研究中常用的公开数据集，通常包含正常、内圈故障、外圈故障和滚动体故障等类别。数据来自实验台架，常用于验证振动信号诊断模型、特征提取方法和分类算法。  在项目中，CWRU 数据集适合用于验证诊断工具链路：输入一段振动信号，模型输出故障类别、置信度和类别概率。若轻量 CNN 在 CWRU 测试集上达到高准确率，能说明该工具在这个\n- [maintenance_decision#maintenance_decision_c001]：诊断报告应区分“模型结论”和“维修决策”。模型可以根据振动信号给出故障类别和置信度，但是否停机、更换或继续运行，需要结合设备重要性、负载、温度、噪声、历史趋势和生产风险。  高置信度故障并伴随温升、噪声增大或振动趋势恶化时，应优先安排停机检查。若置信度中等或现场症状不明显，建议复测多段信号，确认传感器安装和采样工况，再决定是否拆检。\n\n以上为可审计的规则与原文证据，不代表已经诊断或控制真实设备。"
     },
     {
       "id": "approve_01",

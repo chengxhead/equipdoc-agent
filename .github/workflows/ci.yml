@@ -45,11 +45,14 @@ jobs:
       - name: Run demo smoke test
         run: python scripts/demo_smoke.py
 
+      - name: Verify generated knowledge chunks
+        run: python scripts/build_knowledge_chunks.py --check
+
       - name: Run Agent workflow regression gate
         run: >-
           python scripts/eval_agent_workflow.py
           --output runtime/p1_agent_workflow.json
-          --min-case-pass-rate 0.85
+          --min-case-pass-rate 1.00
 
       - name: Run lexical RAG regression gate
         run: >-
@@ -57,3 +60,9 @@ jobs:
           --output runtime/p1_rag_retrieval.json
           --min-hit-at-5 0.90
           --min-mrr-at-10 0.75
+
+      - name: Run high-risk safety and grounding regression gate
+        run: >-
+          python scripts/eval_safety_grounding.py
+          --output runtime/p1_safety_grounding.json
+          --min-case-pass-rate 1.00

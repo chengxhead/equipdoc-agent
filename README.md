@@ -224,8 +224,10 @@ python -m unittest discover -s tests -v
 P1 还把 Agent 与 RAG 指标设为回归门槛，防止后续改动静默降低当前基线：
 
 ```bash
-python scripts/eval_agent_workflow.py --min-case-pass-rate 0.85
+python scripts/build_knowledge_chunks.py --check
+python scripts/eval_agent_workflow.py --min-case-pass-rate 1.00
 python scripts/eval_rag_retrieval.py --min-hit-at-5 0.90 --min-mrr-at-10 0.75
+python scripts/eval_safety_grounding.py --min-case-pass-rate 1.00
 ```
 
 ## 评测证据与适用边界
@@ -234,11 +236,12 @@ python scripts/eval_rag_retrieval.py --min-hit-at-5 0.90 --min-mrr-at-10 0.75
 
 | 模块 | 结果 | 口径 |
 |---|---:|---|
-| Agent 工作流 | 30 条总通过率 86.7% | 无模型 Demo；确定性路由与人工审核流程 |
-| RAG 检索 | Hit@5 92.0%，MRR@10 78.6% | 100 条测试；词法检索；文档级相关性 |
+| Agent 工作流 | 30 条总通过率 100% | 无模型 Demo；确定性路由、知识覆盖与人工审核流程 |
+| 高风险边界 | 20 条固定用例通过率 100% | 确定性规则、引用有效性与抽取证据一致性 |
+| RAG 检索 | Hit@5 91.0%，MRR@10 76.8% | 100 条旧测试；14篇知识文档；文档级相关性 |
 | CNN | 暂不报告准确率 | 旧数据不具备可信文件级 Group Split 条件 |
 
-完整指标、失败样例和口径说明见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
+P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
 
 `artifacts/legacy/` 保存原 AutoDL 结果，用于保留实验链路，不作为最终性能结论：
 
@@ -268,7 +271,7 @@ python scripts/eval_rag_retrieval.py --min-hit-at-5 0.90 --min-mrr-at-10 0.75
 2. 分开统计规则路由与 LLM 路由；
 3. 扩展安全、异常、多轮和多工具评测；
 4. 为知识库补充权威来源和版本信息；
-5. 完成人工 groundedness 审查；
+5. 完成 `safety_human_review.csv` 的人工 groundedness 审查；
 6. 记录 GPU、依赖版本、并发吞吐和 p95 延迟；
 7. 补充面向 AI 产品经理岗位的产品案例文档。
 

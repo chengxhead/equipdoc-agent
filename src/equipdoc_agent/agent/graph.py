@@ -18,6 +18,7 @@ from ..rag import KnowledgeRetriever
 from ..tools import analyze_bearing_signal
 from .policy import should_run_diagnosis
 from .reporting import render_diagnosis_report
+from .safety import assess_high_risk_question
 
 
 class AgentState(TypedDict, total=False):
@@ -144,12 +145,45 @@ def build_graph(settings: Settings | None = None):
                 ]
             }
 
+        safety_decision = assess_high_risk_question(user_text)
+        if safety_decision is not None:
+            retriever = get_retriever()
+            safety_query = f"{user_text} {safety_decision.message}"
+            hits = []
+            if retriever and user_text:
+                hits.extend(
+                    retriever.search(
+                        "RAG 回答边界 拒答 人工审核 证据不足 不编造",
+                        filters={"fault_type": "safety"},
+                        top_k=1,
+                    )
+                )
+                hits.extend(retriever.search(safety_query, top_k=5))
+                unique_hits = {}
+                for item in hits:
+                    unique_hits[item.get("chunk_id")] = item
+                hits = list(unique_hits.values())[:5]
+            snippets = "\n".join(
+                f"- [{item.get('doc_id')}#{item.get('chunk_id')}]："
+                f"{str(item.get('text', '')).replace(chr(10), ' ')[:180]}"
+                for item in hits
+            ) or "- 当前未检索到可用证据。"
+            content = (
+                f"## 安全边界（{safety_decision.policy_id}）\n\n"
+                f"{safety_decision.message}\n\n"
+                "## 检索证据\n\n"
+                f"{snippets}\n\n"
+                "以上为可审计的规则与原文证据，不代表已经诊断或控制真实设备。"
+            )
+            return {"messages": [AIMessage(content=content)]}
+
         if settings.demo_mode:
             retriever = get_retriever()
             hits = retriever.search(user_text, top_k=3) if retriever and user_text else []
             if hits:
                 snippets = "\n".join(
-                    f"- {item.get('doc_id')}#{item.get('chunk_id')}：{str(item.get('text', ''))[:180]}"
+                    f"- [{item.get('doc_id')}#{item.get('chunk_id')}]："
+                    f"{str(item.get('text', '')).replace(chr(10), ' ')[:180]}"
                     for item in hits
                 )
                 content = (

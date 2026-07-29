@@ -20,9 +20,9 @@ SECTION_HEADINGS = {"结论与依据", "建议", "已知边界", "回答降级",
 
 FULL_RAG_SYSTEM_PROMPT = """你是机电装备智能运维辅助 Agent。
 只允许根据“检索证据”和用户明确提供的信息回答，不得把模型记忆当成项目证据。
-每条技术陈述必须单独成句，并在句末引用直接支持整句话的证据，格式必须是
+每条技术陈述必须从一条检索证据中逐字摘录、单独成句，并在句末引用该证据，格式必须是
 [doc_id#chunk_id]，不得只写 [1]，不得用段末的一个引用覆盖前面的多句话。
-只能压缩或改写检索证据中明确出现的信息，不得用模型记忆补充机理、频率关系、
+不得改写、拼接或扩写证据原句，不得用模型记忆补充机理、频率关系、
 现场现象或维修结论，也不得把转频、滑移频率和故障特征频率互相等同。
 证据不足时明确说“当前证据不足”，并说明需要补充什么；不得编造设备编号、采样位置、
 维修历史、运行工况、标准编号、阈值、现场检查结果或精确剩余寿命。
@@ -64,7 +64,9 @@ def build_full_rag_messages(question: str, hits: list[dict[str, Any]]):
 - 只写简短项目符号，每个项目符号只能包含一个完整句子；
 - 每个句子末尾必须逐字复制一个直接支持整句话的允许引用ID；
 - 一个段落末尾的引用不能覆盖前面没有引用的句子；
-- 只能压缩或改写证据原文，不得补充证据中没有出现的因果机理、频率关系或现场结果；
+- 每个项目符号必须逐字摘录一条检索证据中的完整句子，不得改写、拼接或添加前缀；
+- 可以省略证据原句末尾的句号，再添加引用ID；
+- 不得补充证据中没有出现的因果机理、频率关系或现场结果；
 - 示例：外圈局部缺陷会产生周期性冲击 [bearing_outer_race_fault#bearing_outer_race_fault_c001]
 - 不得输出没有引用的技术公式、频率关系或维修结论。
 """
@@ -96,7 +98,8 @@ def build_citation_retry_messages(
 - 只写简短项目符号，每个项目符号只能包含一个完整句子；
 - 每个句子末尾逐字复制一个直接支持整句话的允许 [doc_id#chunk_id]；
 - 不得用最后一个引用覆盖前面多句内容；
-- 只能压缩或改写证据原文；
+- 每个项目符号必须逐字摘录一条检索证据中的完整句子，不得改写、拼接或添加前缀；
+- 可以省略证据原句末尾的句号，再添加引用ID；
 - 若证据没有给出机理、公式、数值或现场结果，就不要补充。"""
     return [SystemMessage(content=FULL_RAG_SYSTEM_PROMPT), HumanMessage(content=prompt)]
 
@@ -123,22 +126,55 @@ def _requires_evidence_citation(unit: str) -> bool:
     return bool(plain) and not plain.startswith(NON_EVIDENCE_PREFIXES)
 
 
+def _normalize_evidence_text(text: str) -> str:
+    text = CITATION_PATTERN.sub("", text)
+    text = re.sub(r"\s+", "", text)
+    return text.strip("。！？；;!? ")
+
+
 def validate_answer_citations(text: str, hits: list[dict[str, Any]]) -> dict[str, Any]:
     allowed = set(allowed_citation_ids(hits))
+    evidence_by_id = {
+        f"{item.get('doc_id', 'unknown')}#{item.get('chunk_id', 'unknown')}":
+        _normalize_evidence_text(str(item.get("text", "")))
+        for item in hits
+    }
     citations = [f"{doc_id}#{chunk_id}" for doc_id, chunk_id in extract_citations(text)]
     unknown = sorted(set(citations).difference(allowed))
     claim_units = [unit for unit in _answer_units(text) if _requires_evidence_citation(unit)]
     uncited_claims = []
+    unsupported_claims = []
     cited_claim_count = 0
+    evidence_matched_claim_count = 0
     for unit in claim_units:
         match = CITATION_AT_UNIT_END_PATTERN.search(unit)
         if match and f"{match.group(1)}#{match.group(2)}" in allowed:
             cited_claim_count += 1
+            claim_text = _normalize_evidence_text(unit)
+            cited_ids = [
+                f"{doc_id}#{chunk_id}" for doc_id, chunk_id in extract_citations(unit)
+            ]
+            if claim_text and any(
+                claim_text in evidence_by_id.get(citation_id, "")
+                for citation_id in cited_ids
+            ):
+                evidence_matched_claim_count += 1
+            else:
+                unsupported_claims.append(unit)
         else:
             uncited_claims.append(unit)
     coverage = cited_claim_count / len(claim_units) if claim_units else 0.0
+    evidence_match_rate = (
+        evidence_matched_claim_count / len(claim_units) if claim_units else 0.0
+    )
     return {
-        "valid": bool(citations) and bool(claim_units) and not unknown and not uncited_claims,
+        "valid": (
+            bool(citations)
+            and bool(claim_units)
+            and not unknown
+            and not uncited_claims
+            and not unsupported_claims
+        ),
         "citation_count": len(citations),
         "citations": citations,
         "unknown_citations": unknown,
@@ -146,6 +182,9 @@ def validate_answer_citations(text: str, hits: list[dict[str, Any]]) -> dict[str
         "cited_claim_count": cited_claim_count,
         "claim_citation_coverage": coverage,
         "uncited_claims": uncited_claims,
+        "evidence_matched_claim_count": evidence_matched_claim_count,
+        "claim_evidence_match_rate": evidence_match_rate,
+        "unsupported_claims": unsupported_claims,
     }
 
 

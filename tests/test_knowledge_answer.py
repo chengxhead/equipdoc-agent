@@ -70,12 +70,24 @@ class KnowledgeAnswerTests(unittest.TestCase):
         answer = (
             "- 外圈缺陷会产生周期性冲击 "
             "[bearing_outer_race_fault#bearing_outer_race_fault_c001]\n"
-            "- 冲击呈现稳定重复模式 "
+            "- 外圈缺陷会产生周期性冲击 "
             "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
         )
         validation = validate_answer_citations(answer, self.hits)
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["claim_citation_coverage"], 1.0)
+        self.assertEqual(validation["claim_evidence_match_rate"], 1.0)
+
+    def test_cited_but_unsupported_paraphrase_is_invalid(self):
+        answer = (
+            "外圈缺陷每转只冲击一次 "
+            "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+        )
+        validation = validate_answer_citations(answer, self.hits)
+        self.assertFalse(validation["valid"])
+        self.assertEqual(validation["claim_citation_coverage"], 1.0)
+        self.assertEqual(validation["claim_evidence_match_rate"], 0.0)
+        self.assertEqual(len(validation["unsupported_claims"]), 1)
 
 
 if __name__ == "__main__":

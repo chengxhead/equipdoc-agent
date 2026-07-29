@@ -151,6 +151,12 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "average_claim_citation_coverage": mean(
                 items, "claim_citation_coverage"
             ),
+            "claim_evidence_match_compliance_rate": rate(
+                items, "claim_evidence_matches_ok"
+            ),
+            "average_claim_evidence_match_rate": mean(
+                items, "claim_evidence_match_rate"
+            ),
             "reference_doc_hit_rate": rate(items, "reference_doc_hit"),
         }
 
@@ -261,6 +267,8 @@ def main() -> None:
             citations_valid = bool(citations) and all(citation_checks)
             claim_level_citations_ok = bool(claim_validation.get("valid"))
             claim_citation_coverage = claim_validation.get("claim_citation_coverage")
+            claim_evidence_match_rate = claim_validation.get("claim_evidence_match_rate")
+            claim_evidence_matches_ok = claim_evidence_match_rate == 1.0
             reference_doc_hit = bool(
                 {doc_id for doc_id, _ in citations}.intersection(case["reference_doc_ids"])
             )
@@ -268,10 +276,11 @@ def main() -> None:
             passed = (
                 success
                 and llm_called
-                and keyword_recall >= 0.5
+                and keyword_recall == 1.0
                 and forbidden_claims_ok
                 and citations_valid
                 and claim_level_citations_ok
+                and claim_evidence_matches_ok
                 and reference_doc_hit
             )
             used_extractive_fallback = generation_path == "extractive_fallback"
@@ -290,6 +299,8 @@ def main() -> None:
             citations_valid = False
             claim_level_citations_ok = False
             claim_citation_coverage = 0.0
+            claim_evidence_matches_ok = False
+            claim_evidence_match_rate = 0.0
             reference_doc_hit = False
             success = False
             llm_called = False
@@ -316,6 +327,8 @@ def main() -> None:
                 "citations_valid": citations_valid,
                 "claim_level_citations_ok": claim_level_citations_ok,
                 "claim_citation_coverage": claim_citation_coverage,
+                "claim_evidence_matches_ok": claim_evidence_matches_ok,
+                "claim_evidence_match_rate": claim_evidence_match_rate,
                 "reference_doc_hit": reference_doc_hit,
                 "generation_path": generation_path,
                 "generation_attempts": generation_attempts,
@@ -339,12 +352,12 @@ def main() -> None:
             break
 
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "evaluation_contract": {
             "mode": "Full mode with a real OpenAI-compatible local Qwen service",
-            "quality_gate": "keyword recall >= 0.5, valid claim-level citations, reference hit, no listed forbidden claim",
-            "answer_guard": "one sentence-level citation-constrained retry, then exact extractive fallback",
+            "quality_gate": "all required keywords present, valid claim-level citations, exact cited-evidence match, reference hit, no listed forbidden claim",
+            "answer_guard": "one exact-evidence citation retry, then exact extractive fallback",
             "latency_scope": "serial end-to-end graph invocation after one warmup",
             "not_measured": [
                 "concurrent throughput",
@@ -384,6 +397,7 @@ def main() -> None:
             "generation_path",
             "keyword_recall",
             "claim_citation_coverage",
+            "claim_evidence_match_rate",
             "citations",
             "human_groundedness_0_or_1",
             "human_answer_correct_0_or_1",
@@ -404,6 +418,7 @@ def main() -> None:
                         "generation_path": row["generation_path"],
                         "keyword_recall": row["keyword_recall"],
                         "claim_citation_coverage": row["claim_citation_coverage"],
+                        "claim_evidence_match_rate": row["claim_evidence_match_rate"],
                         "citations": ";".join(row["citations"]),
                         "human_groundedness_0_or_1": "",
                         "human_answer_correct_0_or_1": "",

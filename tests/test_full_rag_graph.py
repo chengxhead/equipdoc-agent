@@ -26,7 +26,7 @@ class FullRagGraphTests(unittest.TestCase):
             llm = chat_class.return_value
             llm.invoke.return_value = AIMessage(
                 content=(
-                    "外圈故障会产生周期性冲击 "
+                    "当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关 "
                     "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
                 )
             )
@@ -52,7 +52,7 @@ class FullRagGraphTests(unittest.TestCase):
                 AIMessage(content="没有引用的第一版"),
                 AIMessage(
                     content=(
-                        "外圈缺陷产生冲击 "
+                        "当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关 "
                         "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
                     )
                 ),
@@ -84,7 +84,7 @@ class FullRagGraphTests(unittest.TestCase):
                 ),
                 AIMessage(
                     content=(
-                        "外圈缺陷产生周期性冲击 "
+                        "当滚动体经过外圈缺陷位置时，会产生周期性冲击，冲击间隔与外圈故障特征频率相关 "
                         "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
                     )
                 ),

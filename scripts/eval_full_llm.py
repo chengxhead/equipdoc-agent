@@ -359,12 +359,12 @@ def main() -> None:
             break
 
     payload = {
-        "schema_version": 4,
+        "schema_version": 5,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "evaluation_contract": {
             "mode": "Full mode with a real OpenAI-compatible local Qwen service",
             "quality_gate": "all required keywords present, valid claim-level citations, exact cited-evidence match, reference hit, no listed forbidden claim",
-            "answer_guard": "LLM selects 2-5 evidence sentence IDs; system renders exact cited text; one retry then lexical fallback",
+            "answer_guard": "focused and intent-aware retrieval ranks evidence; LLM selects exactly four sentence IDs; system renders exact cited text; one retry then lexical fallback",
             "latency_scope": "serial end-to-end graph invocation after one warmup",
             "not_measured": [
                 "concurrent throughput",

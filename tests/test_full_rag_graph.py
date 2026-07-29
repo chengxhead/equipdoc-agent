@@ -29,7 +29,7 @@ class FullRagGraphTests(unittest.TestCase):
         settings = self._settings()
         with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
             llm = chat_class.return_value
-            llm.invoke.return_value = AIMessage(content="EVIDENCE_IDS: E01,E02")
+            llm.invoke.return_value = AIMessage(content="EVIDENCE_IDS: E01,E02,E03,E04")
             graph = build_graph(settings)
             result = graph.invoke(
                 {
@@ -45,13 +45,37 @@ class FullRagGraphTests(unittest.TestCase):
         self.assertIn("候选证据句", combined_prompt)
         self.assertIn("BPFO", combined_prompt)
         self.assertIn("周期性冲击", result["messages"][-1].content)
+        self.assertNotIn("BPFI", result["messages"][-1].content)
+
+    def test_ball_fault_first_four_cover_spectrum_and_review(self):
+        with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
+            llm = chat_class.return_value
+            llm.invoke.return_value = AIMessage(
+                content="EVIDENCE_IDS: E01,E02,E03,E04"
+            )
+            graph = build_graph(self._settings())
+            result = graph.invoke(
+                {
+                    "messages": [
+                        HumanMessage(
+                            content="为什么滚动体故障的频谱通常比外圈故障复杂，现场还应复核什么？"
+                        )
+                    ],
+                    "signal_path": "",
+                },
+                config={"configurable": {"thread_id": "test_ball_evidence_order"}},
+            )
+
+        answer = result["messages"][-1].content
+        for keyword in ("滚动体", "BSF", "调制", "润滑"):
+            self.assertIn(keyword, answer)
 
     def test_missing_evidence_ids_triggers_one_retry(self):
         with patch("equipdoc_agent.agent.graph.ChatOpenAI") as chat_class:
             llm = chat_class.return_value
             llm.invoke.side_effect = [
                 AIMessage(content="没有证据ID的第一版"),
-                AIMessage(content="EVIDENCE_IDS: E01,E02"),
+                AIMessage(content="EVIDENCE_IDS: E01,E02,E03,E04"),
             ]
             graph = build_graph(self._settings())
             result = graph.invoke(
@@ -72,7 +96,7 @@ class FullRagGraphTests(unittest.TestCase):
             llm = chat_class.return_value
             llm.invoke.side_effect = [
                 AIMessage(content="EVIDENCE_IDS: E98,E99"),
-                AIMessage(content="EVIDENCE_IDS: E01,E02"),
+                AIMessage(content="EVIDENCE_IDS: E01,E02,E03,E04"),
             ]
             graph = build_graph(self._settings())
             result = graph.invoke(

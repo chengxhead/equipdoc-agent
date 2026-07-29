@@ -18,7 +18,7 @@ from ..rag import KnowledgeRetriever
 from ..tools import analyze_bearing_signal
 from .policy import should_run_diagnosis
 from .knowledge_answer import (
-    build_evidence_candidates,
+    build_ranked_evidence_candidates,
     build_citation_retry_messages,
     build_full_rag_messages,
     extract_evidence_selection,
@@ -223,11 +223,14 @@ def build_graph(settings: Settings | None = None):
         if retriever and user_text:
             filters = _knowledge_filter(user_text)
             if filters:
-                hits.extend(retriever.search(user_text, filters=filters, top_k=3))
+                hits.extend(
+                    {**item, "focused_match": True}
+                    for item in retriever.search(user_text, filters=filters, top_k=3)
+                )
             hits.extend(retriever.search(user_text, top_k=5))
             unique_hits = {}
             for item in hits:
-                unique_hits[item.get("chunk_id")] = item
+                unique_hits.setdefault(item.get("chunk_id"), item)
             hits = list(unique_hits.values())[:5]
         if not hits:
             return {
@@ -240,7 +243,7 @@ def build_graph(settings: Settings | None = None):
                     )
                 ]
             }
-        candidates = build_evidence_candidates(hits)
+        candidates = build_ranked_evidence_candidates(user_text, hits)
         response = llm.invoke(build_full_rag_messages(user_text, hits))
         selected_ids = extract_evidence_selection(str(response.content))
         selection_validation = validate_evidence_selection(selected_ids, candidates)

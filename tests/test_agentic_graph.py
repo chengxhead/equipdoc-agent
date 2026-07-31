@@ -200,6 +200,61 @@ class AgenticGraphTests(unittest.TestCase):
             "grounded_synthesis",
         )
 
+    def test_overclarified_knowledge_question_is_retried_and_searched(self):
+        overclarification = json.dumps(
+            {
+                "intent": "clarification",
+                "confidence": 0.8,
+                "equipment": "bearing",
+                "missing_fields": ["operating_condition"],
+                "clarification_question": "请补充具体工况。",
+                "plan": [],
+            },
+            ensure_ascii=False,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ, {}, clear=True
+        ):
+            settings = self._settings(Path(temp_dir))
+            llm = _FakeLLM(
+                [
+                    overclarification,
+                    _knowledge_plan(),
+                    _observer_answer(),
+                    "EVIDENCE_IDS: E01",
+                    _grounded_draft(),
+                ]
+            )
+            graph = build_agentic_graph(
+                settings,
+                llm=llm,
+                retriever=_FakeRetriever(),
+            )
+            result = graph.invoke(
+                {
+                    "messages": [
+                        HumanMessage(
+                            content="轴承外圈局部故障为什么会产生周期性冲击，现场应复核什么？"
+                        )
+                    ],
+                },
+                config={"configurable": {"thread_id": "agentic_overclarification"}},
+            )
+
+        self.assertEqual(result["current_plan"]["intent"], "knowledge_qa")
+        self.assertEqual(result["tool_step_count"], 1)
+        self.assertEqual(
+            result["tool_observations"][0]["_tool_name"],
+            "search_maintenance_knowledge",
+        )
+        self.assertEqual(result["planning_metadata"]["generation_path"], "retry")
+        self.assertEqual(result["planning_metadata"]["attempts"], 2)
+        self.assertIn(
+            "self-contained maintenance knowledge question",
+            result["planning_metadata"]["validation_errors"][0],
+        )
+        self.assertEqual(len(llm.calls), 5)
+
     def test_inspect_signal_is_read_only_and_does_not_interrupt(self):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
             os.environ, {}, clear=True

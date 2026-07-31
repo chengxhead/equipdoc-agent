@@ -70,6 +70,28 @@ class AgenticPlanningTests(unittest.TestCase):
         self.assertIn("signal", plan["missing_fields"])
         self.assertIn(".npy", plan["clarification_question"])
 
+    def test_self_contained_knowledge_question_rejects_clarification(self):
+        clarification = _plan_text(
+            intent="clarification",
+            missing_fields=["operating_condition"],
+            clarification_question="请补充具体工况。",
+            plan=[],
+        )
+        with self.assertRaisesRegex(
+            PlanningValidationError,
+            "self-contained maintenance knowledge question",
+        ):
+            parse_and_validate_plan(
+                clarification,
+                user_text="管道泄漏声振诊断应关注哪些数据和常见误报来源？",
+            )
+
+        executable_request = parse_and_validate_plan(
+            clarification,
+            user_text="请诊断这个轴承信号。",
+        )
+        self.assertEqual(executable_request["intent"], "clarification")
+
     def test_model_signal_path_is_removed_from_tool_arguments(self):
         text = _plan_text(
             intent="diagnosis",
@@ -184,6 +206,16 @@ class AgenticPlanningTests(unittest.TestCase):
 
         diagnosis = fallback_plan("请诊断这个轴承", has_signal=True)
         self.assertEqual(diagnosis["plan"][0]["tool"], "diagnose_bearing")
+
+        knowledge = fallback_plan(
+            "管道泄漏声振诊断应关注哪些数据和常见误报来源？",
+            has_signal=False,
+        )
+        self.assertEqual(knowledge["intent"], "knowledge_qa")
+        self.assertEqual(
+            knowledge["plan"][0]["tool"],
+            "search_maintenance_knowledge",
+        )
 
     def test_observation_decision_enforces_permissions_and_remaining_steps(self):
         raw = json.dumps(

@@ -333,6 +333,7 @@ def build_agentic_graph(
                 _response_text(first_response),
                 max_steps=settings.agent_max_steps,
                 has_signal=bool(signal_path),
+                user_text=user_text,
             )
             generation_path = "first_pass"
         except PlanningValidationError as first_error:
@@ -352,6 +353,7 @@ def build_agentic_graph(
                     _response_text(second_response),
                     max_steps=settings.agent_max_steps,
                     has_signal=bool(signal_path),
+                    user_text=user_text,
                 )
                 generation_path = "retry"
             except PlanningValidationError as second_error:

@@ -41,7 +41,7 @@ P2.1 使用严格 JSON 规划和本地工具执行，不是原生 Function Calli
 
 结果：
 
-- 80 项单元测试全部通过；
+- 86 项单元测试全部通过；
 - Demo 严格健康检查通过；
 - Demo Smoke Test 通过；
 - Agentic Smoke 数据集 Schema 校验通过：7 个案例、8 个回合；
@@ -61,7 +61,7 @@ P2.1 使用严格 JSON 规划和本地工具执行，不是原生 Function Calli
 
 ## 仍未验证
 
-- 更大规模、冻结版本的正式 Agentic 评测；
+- 已冻结 56-case / 64-turn 正式 Agentic 评测集，但尚未在 AutoDL 运行；
 - 人工回答正确性、证据支持性和引用有用性；
 - CNN 工业诊断准确率。
 
@@ -87,4 +87,4 @@ python scripts/eval_agentic_full.py \
   --min-case-pass-rate 1.0
 ```
 
-真实结果需要继续保留原始 JSON、失败案例、Git commit、GPU 和依赖版本。下一阶段先完成人工复核，再扩展正式评测集。
+真实结果需要继续保留原始 JSON、失败案例、Git commit、GPU 和依赖版本。下一阶段先运行已冻结的正式评测集，再生成对应人工复核工作簿。正式评测合同见 [`p2-1-formal-evaluation-plan.md`](p2-1-formal-evaluation-plan.md)。

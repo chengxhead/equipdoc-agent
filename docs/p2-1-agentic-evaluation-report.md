@@ -103,7 +103,7 @@ P2.1 的小规模真实模型 Smoke 里程碑已经完成：三种工具、诊�
 
 但以下工作仍未完成：
 
-- 扩展并冻结更大规模正式 Agentic 评测集；
+- 在已冻结的 56-case / 64-turn 正式 Agentic 评测集上完成 AutoDL 运行；
 - 完成人工正确性、证据支持性和安全适当性复核；
 - 降低 66.7% 的确定性规划 fallback 占比；
 - 提升自然语言综合通过率，减少 100% 的证据回答抽取式 fallback；
@@ -126,4 +126,3 @@ python scripts/eval_agentic_full.py \
 ```
 
 运行前需要显式启用 Full Agentic 模式，并指向正在运行的 Qwen OpenAI-compatible 服务与本地 CNN 文件；模型权重、`.env` 和私有绝对路径不得提交仓库。
-

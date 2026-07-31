@@ -353,6 +353,38 @@ def _clarification_for_missing_signal(plan: dict[str, Any]) -> dict[str, Any]:
     return plan
 
 
+def _requested_signal_intent(user_text: str) -> str | None:
+    """Return the required intent for an explicit request about the current signal."""
+    question = _clean_text(user_text, "user_text", required=True, limit=4000)
+    lowered = question.lower()
+    signal_references = ("信号", "数据", "波形", "振动")
+    deictic_markers = ("这段", "这个", "该段", "当前", "上传", "刚才")
+    execution_markers = ("诊断", "检查", "分析", "判断", "分类", "识别", "运行")
+    if not (
+        any(marker in lowered for marker in signal_references)
+        and any(marker in lowered for marker in deictic_markers)
+        and any(marker in lowered for marker in execution_markers)
+    ):
+        return None
+    inspection_markers = ("信号摘要", "采样点", "rms", "峰值", "均值", "标准差")
+    if any(marker in lowered for marker in inspection_markers):
+        return "signal_inspection"
+    diagnosis_markers = (
+        "诊断",
+        "分类",
+        "识别",
+        "判断",
+        "运行",
+        "有没有问题",
+        "置信度",
+        "故障概率",
+        "分类模型",
+    )
+    if any(marker in lowered for marker in diagnosis_markers) or "分析" in lowered:
+        return "diagnosis"
+    return None
+
+
 def _is_self_contained_knowledge_question(user_text: str) -> bool:
     """Return whether a domain question is specific enough for knowledge retrieval."""
     question = _clean_text(user_text, "user_text", required=True, limit=4000)
@@ -375,6 +407,12 @@ def _is_self_contained_knowledge_question(user_text: str) -> bool:
         "热失控",
         "置信度",
         "误报",
+        "知识库",
+        "资料库",
+        "rag",
+        "标准",
+        "条款",
+        "规程",
     )
     knowledge_markers = (
         "为什么",
@@ -394,15 +432,7 @@ def _is_self_contained_knowledge_question(user_text: str) -> bool:
         "依据",
         "建议",
     )
-    signal_references = ("信号", "数据", "波形")
-    deictic_markers = ("这段", "这个", "该段", "当前", "上传", "刚才")
-    execution_markers = ("诊断", "检查", "分析", "判断", "分类", "识别")
-    refers_to_specific_signal = (
-        any(marker in lowered for marker in signal_references)
-        and any(marker in lowered for marker in deictic_markers)
-        and any(marker in lowered for marker in execution_markers)
-    )
-    if refers_to_specific_signal:
+    if _requested_signal_intent(question) is not None:
         return False
     return any(marker in lowered for marker in domain_markers) and any(
         marker in lowered for marker in knowledge_markers
@@ -448,6 +478,23 @@ def parse_and_validate_plan(
             "removed_arguments": removed_arguments,
         },
     }
+
+    requested_signal_intent = (
+        _requested_signal_intent(user_text) if user_text is not None else None
+    )
+    permitted_signal_intents = (
+        {requested_signal_intent}
+        if has_signal
+        else {requested_signal_intent, "clarification"}
+    )
+    if (
+        requested_signal_intent is not None
+        and intent not in permitted_signal_intents
+    ):
+        raise PlanningValidationError(
+            f"Explicit current-signal request requires {requested_signal_intent}, "
+            f"not {intent}"
+        )
 
     if intent in {"diagnosis", "signal_inspection"} and not has_signal:
         return _clarification_for_missing_signal(normalized)
@@ -507,6 +554,8 @@ def build_intent_plan_messages(
 plan 最多 {max_steps} 步。工具名、参数和依赖必须符合下面的 Schema。
 signal_path 由系统注入，绝对禁止生成本地路径或 signal_path 参数。
 诊断或信号检查缺少文件时，必须返回 clarification，plan 必须为空。
+用户明确要求诊断、分类或识别当前信号且文件已存在时，必须返回 diagnosis；
+用户只要求当前信号的 RMS、峰值、均值、标准差等只读统计时，必须返回 signal_inspection。
 询问机理、原因、应关注的数据、误报来源或现场复核项，属于信息完整的通用知识问题；
 即使缺少具体型号或工况，也必须返回 knowledge_qa 并调用 search_maintenance_knowledge，不得追问。
 只有无法形成有意义的检索问题，或执行诊断/信号检查确实缺少信号时，才返回 clarification。
@@ -628,6 +677,9 @@ def fallback_plan(
             "有没有问题",
             "置信度",
             "故障概率",
+            "分类",
+            "识别",
+            "分类模型",
         )
     )
     inspection_requested = any(

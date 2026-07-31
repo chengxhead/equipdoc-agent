@@ -60,6 +60,37 @@ class KnowledgeAnswerTests(unittest.TestCase):
         self.assertFalse(validation["valid"])
         self.assertEqual(validation["unknown_ids"], ["E02"])
 
+    def test_selection_must_include_multiple_high_relevance_candidates(self):
+        candidates = [
+            {
+                "evidence_id": f"E{index:02d}",
+                "citation": f"doc#chunk_{index}",
+                "text": text,
+                "focused_match": False,
+            }
+            for index, text in enumerate(
+                (
+                    "RMS 反映整体能量。",
+                    "峭度对冲击较敏感。",
+                    "一般轴承知识。",
+                    "通用现场建议。",
+                    "外圈故障说明。",
+                    "内圈故障说明。",
+                    "润滑状态说明。",
+                    "温度检查说明。",
+                ),
+                start=1,
+            )
+        ]
+        validation = validate_evidence_selection(
+            ["E05", "E06", "E07", "E08"],
+            candidates,
+            question="RMS 和峭度分别反映什么？",
+        )
+        self.assertFalse(validation["valid"])
+        self.assertEqual(validation["minimum_relevance_matches"], 2)
+        self.assertEqual(validation["relevance_matches"], [])
+
     def test_selected_evidence_is_rendered_with_source_citation(self):
         candidates = build_evidence_candidates(self.hits)
         answer = render_selected_evidence(candidates, ["E01"])

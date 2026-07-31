@@ -335,6 +335,41 @@ class AgenticGraphTests(unittest.TestCase):
                 execute.assert_not_called()
             self.assertIn("取消", rejected["messages"][-1].content)
 
+    def test_explicit_signal_diagnosis_retries_a_knowledge_only_plan(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ, {}, clear=True
+        ):
+            root = Path(temp_dir)
+            sample_root = root / "data/samples"
+            sample_root.mkdir(parents=True)
+            sample = sample_root / "diagnose.npy"
+            np.save(sample, np.arange(1024, dtype=np.float32))
+            settings = self._settings(root)
+            llm = _FakeLLM([_knowledge_plan(), _diagnosis_plan()])
+            graph = build_agentic_graph(settings, llm=llm)
+            pending = graph.invoke(
+                {
+                    "messages": [
+                        HumanMessage(
+                            content=(
+                                "先用分类模型分析这段轴承振动，"
+                                "再用知识证据解释结果。"
+                            )
+                        )
+                    ],
+                    "signal_path": str(sample),
+                },
+                config={"configurable": {"thread_id": "agentic_diagnosis_retry"}},
+            )
+
+        self.assertIn("__interrupt__", pending)
+        self.assertEqual(pending["current_plan"]["intent"], "diagnosis")
+        self.assertEqual(pending["planning_metadata"]["generation_path"], "retry")
+        self.assertIn(
+            "requires diagnosis",
+            pending["planning_metadata"]["validation_errors"][0],
+        )
+
     def test_max_steps_prevents_observer_from_calling_another_tool(self):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
             os.environ, {}, clear=True

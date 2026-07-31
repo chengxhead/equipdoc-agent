@@ -211,17 +211,34 @@ def extract_evidence_selection(text: str) -> list[str]:
 
 
 def validate_evidence_selection(
-    selected_ids: list[str], candidates: list[dict[str, Any]]
+    selected_ids: list[str],
+    candidates: list[dict[str, Any]],
+    *,
+    question: str | None = None,
 ) -> dict[str, Any]:
     allowed = {item["evidence_id"] for item in candidates}
     unknown = [evidence_id for evidence_id in selected_ids if evidence_id not in allowed]
     required_count = min(4, len(candidates))
+    recommended_ids = (
+        _rank_candidates_for_question(question, candidates, limit=required_count)
+        if question and required_count
+        else []
+    )
+    relevance_matches = sorted(set(selected_ids).intersection(recommended_ids))
+    minimum_relevance_matches = min(2, required_count) if recommended_ids else 0
     return {
-        "valid": len(selected_ids) == required_count and not unknown,
+        "valid": (
+            len(selected_ids) == required_count
+            and not unknown
+            and len(relevance_matches) >= minimum_relevance_matches
+        ),
         "selected_ids": selected_ids,
         "unknown_ids": unknown,
         "selection_count": len(selected_ids),
         "required_selection_count": required_count,
+        "recommended_ids": recommended_ids,
+        "relevance_matches": relevance_matches,
+        "minimum_relevance_matches": minimum_relevance_matches,
     }
 
 

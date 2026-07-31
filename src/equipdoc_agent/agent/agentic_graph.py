@@ -609,7 +609,11 @@ def build_agentic_graph(
             candidates = build_ranked_evidence_candidates(user_text, hits)
             response = model.invoke(build_full_rag_messages(user_text, hits))
             selected_ids = extract_evidence_selection(_response_text(response))
-            selection_validation = validate_evidence_selection(selected_ids, candidates)
+            selection_validation = validate_evidence_selection(
+                selected_ids,
+                candidates,
+                question=user_text,
+            )
             selection_attempts = 1
             selection_path = "first_pass"
             if not selection_validation["valid"]:
@@ -624,6 +628,7 @@ def build_agentic_graph(
                 selection_validation = validate_evidence_selection(
                     selected_ids,
                     candidates,
+                    question=user_text,
                 )
                 selection_attempts = 2
                 selection_path = "retry"

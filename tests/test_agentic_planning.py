@@ -92,6 +92,33 @@ class AgenticPlanningTests(unittest.TestCase):
         )
         self.assertEqual(executable_request["intent"], "clarification")
 
+    def test_rag_and_standard_question_rejects_unnecessary_clarification(self):
+        clarification = _plan_text(
+            intent="clarification",
+            missing_fields=["model"],
+            clarification_question="请补充具体型号。",
+            plan=[],
+        )
+        with self.assertRaisesRegex(
+            PlanningValidationError,
+            "self-contained maintenance knowledge question",
+        ):
+            parse_and_validate_plan(
+                clarification,
+                user_text="RAG 遇到资料库外的设备型号和标准条款时，应如何表达不确定性？",
+            )
+
+    def test_current_signal_classification_cannot_be_replaced_by_knowledge_qa(self):
+        with self.assertRaisesRegex(
+            PlanningValidationError,
+            "Explicit current-signal request requires diagnosis",
+        ):
+            parse_and_validate_plan(
+                _plan_text(),
+                has_signal=True,
+                user_text="先用分类模型分析这段轴承振动，再用知识证据解释结果。",
+            )
+
     def test_model_signal_path_is_removed_from_tool_arguments(self):
         text = _plan_text(
             intent="diagnosis",

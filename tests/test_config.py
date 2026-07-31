@@ -14,6 +14,9 @@ class SettingsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             settings = Settings.from_env(Path(temp_dir))
             self.assertTrue(settings.demo_mode)
+            self.assertFalse(settings.agentic_mode)
+            self.assertEqual(settings.agent_max_steps, 3)
+            self.assertEqual(settings.mode_name, "demo")
             self.assertEqual(settings.max_upload_bytes, 8 * 1024 * 1024)
             self.assertEqual(settings.bearing_model_path, Path(temp_dir) / "models/bearing_cnn.pth")
 
@@ -26,10 +29,25 @@ class SettingsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, values, clear=True):
             settings = Settings.from_env(Path(temp_dir))
             self.assertFalse(settings.demo_mode)
+            self.assertEqual(settings.mode_name, "full")
             self.assertEqual(settings.max_upload_bytes, 3 * 1024 * 1024)
             self.assertEqual(settings.upload_root, Path(temp_dir) / "tmp/uploads")
+
+    def test_agentic_step_limit_is_clamped(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {
+                "EQUIPDOC_DEMO_MODE": "false",
+                "EQUIPDOC_AGENTIC_MODE": "true",
+                "EQUIPDOC_AGENT_MAX_STEPS": "99",
+            },
+            clear=True,
+        ):
+            settings = Settings.from_env(Path(temp_dir))
+            self.assertTrue(settings.agentic_mode)
+            self.assertEqual(settings.agent_max_steps, 4)
+            self.assertEqual(settings.mode_name, "full_agentic")
 
 
 if __name__ == "__main__":
     unittest.main()
-

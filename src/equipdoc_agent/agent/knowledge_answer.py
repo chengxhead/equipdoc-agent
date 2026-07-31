@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -15,11 +16,30 @@ UNIT_SPLIT_PATTERN = re.compile(r"(?<=[。！？；;!?])\s*|\n+")
 NON_EVIDENCE_PREFIXES = (
     "模型生成内容两次未通过引用校验",
     "模型两次未返回合格的证据选择",
+    "自然语言回答两次未通过引用与术语校验",
     "以上内容来自本次检索证据",
     "当前证据不足",
     "当前未检索到可用证据",
 )
-SECTION_HEADINGS = {"结论与依据", "建议", "已知边界", "回答降级", "检索证据"}
+SECTION_HEADINGS = {
+    "结论与依据",
+    "综合解释",
+    "现场复核",
+    "建议",
+    "已知边界",
+    "回答降级",
+    "检索证据",
+}
+GROUNDING_FORBIDDEN_TERMS = (
+    "远程控制设备",
+    "已执行停机",
+    "已执行启机",
+    "精确剩余寿命",
+    "保证不会故障",
+)
+TECHNICAL_ACRONYM_PATTERN = re.compile(r"\b[A-Z][A-Z0-9-]{1,12}\b")
+TECHNICAL_NUMBER_PATTERN = re.compile(r"(?<![#A-Za-z])\d+(?:\.\d+)?%?")
+WINDOWS_PATH_PATTERN = re.compile(r"(?i)\b[A-Z]:[\\/][^\s\"']+")
 
 FULL_RAG_SYSTEM_PROMPT = """你是机电装备智能运维辅助 Agent 的证据选择器。
 你的任务不是自由生成答案，而是从候选证据句中选择能直接回答用户问题的句子。
@@ -316,3 +336,229 @@ def render_extractive_fallback(
 
 {selected}
 """
+
+
+def _safe_synthesis_observation(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _safe_synthesis_observation(item)
+            for key, item in value.items()
+            if key
+            not in {
+                "signal_path",
+                "absolute_path",
+                "server_path",
+                "path",
+                "hits",
+            }
+        }
+    if isinstance(value, list):
+        return [_safe_synthesis_observation(item) for item in value]
+    if isinstance(value, str):
+        redacted = WINDOWS_PATH_PATTERN.sub("[REDACTED_PATH]", value)
+        if redacted.startswith(("/", "\\")):
+            return "[REDACTED_PATH]"
+        return redacted
+    return value
+
+
+def _grounded_evidence_context(selected_evidence: list[dict[str, Any]]) -> str:
+    return "\n".join(
+        f"[{item.get('citation', 'unknown#unknown')}] {str(item.get('text', '')).strip()}"
+        for item in selected_evidence
+    )
+
+
+def build_grounded_synthesis_messages(
+    question: str,
+    selected_evidence: list[dict[str, Any]],
+    tool_observations: list[dict[str, Any]] | None = None,
+):
+    evidence_context = _grounded_evidence_context(selected_evidence)
+    observations = _safe_synthesis_observation(tool_observations or [])
+    system_prompt = """你是机电装备智能运维辅助 Agent 的证据化回答器。
+只能依据本轮给出的证据句解释机理、现象和现场复核建议，不得引入外部知识。
+工具观察是本次运行事实，只用于理解上下文；不要用知识文档引用替工具结果背书。
+输出只能包含“## 综合解释”和可选的“## 现场复核”两个部分。
+每一个技术陈述句都必须在句末标注本句实际依据的 [doc_id#chunk_id]。
+不得把一个引用只挂在整段末尾，不得使用未提供的引用、缩写、频率名称或数字。
+不得声称已经控制设备、预测精确剩余寿命或保证设备安全。
+不要输出“已知边界”部分，系统会确定性追加边界说明。"""
+    context = {
+        "user_question": str(question).strip(),
+        "tool_observations": observations,
+        "selected_evidence": evidence_context,
+    }
+    return [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=json.dumps(context, ensure_ascii=False, indent=2)),
+    ]
+
+
+def build_grounded_synthesis_retry_messages(
+    question: str,
+    selected_evidence: list[dict[str, Any]],
+    tool_observations: list[dict[str, Any]] | None,
+    rejected_draft: str,
+    validation: dict[str, Any],
+):
+    messages = build_grounded_synthesis_messages(
+        question,
+        selected_evidence,
+        tool_observations,
+    )
+    retry_context = {
+        "validation_errors": {
+            "unknown_citations": validation.get("unknown_citations", []),
+            "uncited_claims": validation.get("uncited_claims", []),
+            "unsupported_claims": validation.get("unsupported_claims", []),
+            "unsupported_terms": validation.get("unsupported_terms", []),
+            "forbidden_terms": validation.get("forbidden_terms", []),
+        },
+        "rejected_draft": str(rejected_draft)[:5000],
+        "instruction": (
+            "重新生成完整回答。删除无证据内容，并确保每个技术陈述句末都有其直接证据引用。"
+        ),
+    }
+    messages.append(HumanMessage(content=json.dumps(retry_context, ensure_ascii=False, indent=2)))
+    return messages
+
+
+def _claim_supported_by_evidence(claim: str, evidence_text: str) -> bool:
+    claim_tokens = _selection_tokens(CITATION_PATTERN.sub("", claim))
+    evidence_tokens = _selection_tokens(evidence_text)
+    if not claim_tokens or not evidence_tokens:
+        return False
+    overlap = claim_tokens.intersection(evidence_tokens)
+    required_overlap = min(2, max(1, len(claim_tokens) // 12))
+    return len(overlap) >= required_overlap
+
+
+def validate_grounded_draft(
+    text: str,
+    selected_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    evidence_by_citation = {
+        str(item.get("citation")): str(item.get("text", ""))
+        for item in selected_evidence
+        if item.get("citation")
+    }
+    allowed = set(evidence_by_citation)
+    all_citations = [
+        f"{doc_id}#{chunk_id}" for doc_id, chunk_id in extract_citations(text)
+    ]
+    unknown_citations = sorted(set(all_citations).difference(allowed))
+    claim_units = _answer_units(text)
+    uncited_claims: list[str] = []
+    unsupported_claims: list[str] = []
+    unsupported_terms: list[dict[str, str]] = []
+    cited_claim_count = 0
+
+    for unit in claim_units:
+        unit_citations = [
+            f"{doc_id}#{chunk_id}" for doc_id, chunk_id in extract_citations(unit)
+        ]
+        end_match = CITATION_AT_UNIT_END_PATTERN.search(unit)
+        if (
+            not end_match
+            or f"{end_match.group(1)}#{end_match.group(2)}" not in allowed
+            or any(citation not in allowed for citation in unit_citations)
+        ):
+            uncited_claims.append(unit)
+            continue
+        cited_claim_count += 1
+        cited_text = "\n".join(
+            evidence_by_citation[citation]
+            for citation in unit_citations
+            if citation in evidence_by_citation
+        )
+        if not _claim_supported_by_evidence(unit, cited_text):
+            unsupported_claims.append(unit)
+
+        plain_claim = CITATION_PATTERN.sub("", unit)
+        for term in sorted(set(TECHNICAL_ACRONYM_PATTERN.findall(plain_claim))):
+            if term not in cited_text:
+                unsupported_terms.append({"claim": unit, "term": term})
+        for term in sorted(set(TECHNICAL_NUMBER_PATTERN.findall(plain_claim))):
+            if term not in cited_text:
+                unsupported_terms.append({"claim": unit, "term": term})
+
+    forbidden_terms = [term for term in GROUNDING_FORBIDDEN_TERMS if term in text]
+    coverage = cited_claim_count / len(claim_units) if claim_units else 0.0
+    return {
+        "valid": (
+            bool(claim_units)
+            and bool(all_citations)
+            and not unknown_citations
+            and not uncited_claims
+            and not unsupported_claims
+            and not unsupported_terms
+            and not forbidden_terms
+        ),
+        "citation_count": len(all_citations),
+        "citations": all_citations,
+        "unknown_citations": unknown_citations,
+        "claim_count": len(claim_units),
+        "cited_claim_count": cited_claim_count,
+        "claim_citation_coverage": coverage,
+        "uncited_claims": uncited_claims,
+        "unsupported_claims": unsupported_claims,
+        "unsupported_terms": unsupported_terms,
+        "forbidden_terms": forbidden_terms,
+    }
+
+
+def render_tool_observation_section(observations: list[dict[str, Any]]) -> str:
+    """Render tool facts deterministically without asking knowledge citations to support them."""
+    lines = ["## 工具观察"]
+    rendered = 0
+    for observation in observations:
+        tool_name = str(observation.get("_tool_name", "unknown"))
+        status = str(observation.get("status", "unknown"))
+        if tool_name == "search_maintenance_knowledge":
+            continue
+        rendered += 1
+        lines.append(f"- 工具：`{tool_name}`；状态：`{status}`。")
+        if observation.get("signal_file"):
+            lines.append(f"- 信号文件：`{observation['signal_file']}`。")
+        if status == "error":
+            lines.append(f"- 执行错误：{observation.get('error', '未知错误')}。")
+            continue
+        if observation.get("fault_type"):
+            lines.append(f"- 故障类别：{observation['fault_type']}。")
+        confidence = observation.get("confidence")
+        if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+            lines.append(f"- 模型置信度：{float(confidence):.2%}。")
+        signal = observation.get("signal")
+        if isinstance(signal, dict):
+            summary_parts = []
+            for key, label in (
+                ("samples", "采样点"),
+                ("rms", "RMS"),
+                ("peak_abs", "峰值绝对值"),
+                ("mean", "均值"),
+                ("std", "标准差"),
+            ):
+                value = signal.get(key)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    rendered_value = (
+                        str(int(value)) if key == "samples" else f"{float(value):.6g}"
+                    )
+                    summary_parts.append(f"{label}={rendered_value}")
+            if summary_parts:
+                lines.append(f"- 信号摘要：{'，'.join(summary_parts)}。")
+        warnings = observation.get("warnings")
+        if not isinstance(warnings, list):
+            warning = observation.get("warning")
+            warnings = [warning] if warning else []
+        for warning in warnings:
+            lines.append(f"- 工具警告：{warning}")
+    if rendered == 0:
+        return ""
+    lines.extend(
+        [
+            "",
+            "以上仅为本次工具的直接输出；诊断结果仍需结合现场工况和人工复核。",
+        ]
+    )
+    return "\n".join(lines)

@@ -78,13 +78,10 @@ def submit(question, uploaded_file, use_sample, thread_id):
             text = "请诊断这段轴承振动信号并给出有依据的处理建议。"
         if not text:
             raise ValueError("请输入问题，或者选择/上传一个信号文件。")
-        result = AGENT.invoke(
-            {
-                "messages": [HumanMessage(content=text)],
-                "signal_path": str(signal_path) if signal_path else "",
-            },
-            config=_config(thread_id),
-        )
+        payload = {"messages": [HumanMessage(content=text)]}
+        if signal_path:
+            payload["signal_path"] = str(signal_path)
+        result = AGENT.invoke(payload, config=_config(thread_id))
         payload = _interrupt_payload(result)
         if payload:
             return (
@@ -140,7 +137,11 @@ HEALTH = collect_health(SETTINGS)
 MODE_NOTICE = (
     "⚠️ 当前为 **Demo 模式**：无需7B模型；故障类别是固定案例回放，不能用于真实诊断。"
     if SETTINGS.demo_mode
-    else "当前为 **Full 模式**：将调用配置的模型与轴承 CNN。"
+    else (
+        "当前为 **Full Agentic 模式**：模型执行受约束规划，诊断工具仍需人工审核。"
+        if SETTINGS.agentic_mode
+        else "当前为 **Full P2 基线模式**：将调用配置的模型与轴承 CNN。"
+    )
 )
 
 with gr.Blocks(title="EquipDoc-Agent") as demo:

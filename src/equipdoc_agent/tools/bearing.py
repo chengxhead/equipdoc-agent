@@ -61,6 +61,27 @@ def _signal_summary(signal: np.ndarray) -> dict[str, Any]:
     }
 
 
+def inspect_bearing_signal(signal_path: str | Path, settings: Settings) -> dict[str, Any]:
+    """Inspect a sandboxed signal without running the legacy classifier."""
+    path = validate_signal_path(signal_path, settings)
+    signal = _load_signal(path)
+    summary = _signal_summary(signal)
+    warnings = []
+    if signal.size < SAMPLE_LEN:
+        warnings.append("信号少于1024个采样点；旧分类器会进行补零。")
+    elif signal.size > SAMPLE_LEN:
+        warnings.append("旧分类器只读取前1024个采样点。")
+    if summary["std"] == 0.0:
+        warnings.append("信号标准差为0，缺少可用于振动分析的变化。")
+    return {
+        "status": "ok",
+        "mode": "signal_inspection",
+        "signal_file": path.name,
+        "signal": summary,
+        "warnings": warnings,
+    }
+
+
 @lru_cache(maxsize=2)
 def _load_model(model_path: str, norm_path: str):
     import torch
@@ -126,4 +147,3 @@ def analyze_bearing_signal(signal_path: str | Path, settings: Settings) -> dict[
         "signal": summary,
         "warning": preprocessing_note,
     }
-

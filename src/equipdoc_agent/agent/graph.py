@@ -97,6 +97,10 @@ def _review_call_payload(call: dict) -> dict:
 
 def build_graph(settings: Settings | None = None):
     settings = settings or Settings.from_env()
+    if not settings.demo_mode and settings.agentic_mode:
+        from .agentic_graph import build_agentic_graph
+
+        return build_agentic_graph(settings)
     retriever_holder: dict[str, KnowledgeRetriever] = {}
 
     def get_retriever() -> KnowledgeRetriever | None:

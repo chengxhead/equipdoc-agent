@@ -32,6 +32,8 @@ def _resolve(project_root: Path, value: str) -> Path:
 class Settings:
     project_root: Path
     demo_mode: bool
+    agentic_mode: bool
+    agent_max_steps: int
     llm_base_url: str
     llm_model: str
     llm_api_key: str
@@ -59,6 +61,8 @@ class Settings:
         return cls(
             project_root=root,
             demo_mode=_env_bool("EQUIPDOC_DEMO_MODE", True),
+            agentic_mode=_env_bool("EQUIPDOC_AGENTIC_MODE", False),
+            agent_max_steps=max(1, min(4, int(os.getenv("EQUIPDOC_AGENT_MAX_STEPS", "3")))),
             llm_base_url=os.getenv("EQUIPDOC_LLM_BASE_URL", "http://127.0.0.1:8000/v1").rstrip("/"),
             llm_model=os.getenv("EQUIPDOC_LLM_MODEL", "qwen-equipdoc"),
             llm_api_key=os.getenv("EQUIPDOC_LLM_API_KEY", "EMPTY"),
@@ -84,5 +88,6 @@ class Settings:
 
     @property
     def mode_name(self) -> str:
-        return "demo" if self.demo_mode else "full"
-
+        if self.demo_mode:
+            return "demo"
+        return "full_agentic" if self.agentic_mode else "full"

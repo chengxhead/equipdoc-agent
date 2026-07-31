@@ -42,6 +42,10 @@ def collect_health(settings: Settings) -> dict:
     return {
         "ready": ready,
         "mode": settings.mode_name,
+        "agentic": {
+            "enabled": not settings.demo_mode and settings.agentic_mode,
+            "max_steps": settings.agent_max_steps,
+        },
         "checks": [asdict(item) for item in checks],
         "note": "Service reachability is not checked unless the application sends a request.",
     }
@@ -59,4 +63,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

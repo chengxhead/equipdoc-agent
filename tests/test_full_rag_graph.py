@@ -18,6 +18,7 @@ class FullRagGraphTests(unittest.TestCase):
         return replace(
             Settings.from_env(ROOT),
             demo_mode=False,
+            agentic_mode=False,
             rag_db_dir=(ROOT / "runtime/test_full_no_vector_db").resolve(),
         )
 

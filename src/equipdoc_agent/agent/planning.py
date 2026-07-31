@@ -711,6 +711,8 @@ action 只能是 call_tool、answer 或 clarify。
 本轮还允许 {remaining_steps} 次工具调用；可调用工具只有：{", ".join(allowed) or "无"}。
 不得生成 signal_path、本地路径、未知工具或超出工具 Schema 的参数。
 如果证据或信息不足，选择 clarify；如果可以回答，选择 answer。
+已有成功且可用的工具观察时，不得用 clarify 隐藏结果；应选择 answer，
+或在仍需补充证据且有许可时选择 call_tool。
 
 输出格式：
 {{
@@ -740,6 +742,7 @@ def parse_observation_decision(
     permitted_tools: Iterable[str],
     remaining_steps: int,
     has_signal: bool = False,
+    has_usable_observation: bool = False,
 ) -> dict[str, Any]:
     remaining_steps = _bounded_integer(remaining_steps, "remaining_steps", 0, 4)
     allowed = set(permitted_tools).intersection(ALLOWED_TOOLS)
@@ -798,6 +801,10 @@ def parse_observation_decision(
         raise PlanningValidationError(f"Action {action} cannot specify arguments")
     if action == "clarify" and not clarification_question:
         raise PlanningValidationError("clarify requires clarification_question")
+    if action == "clarify" and has_usable_observation:
+        raise PlanningValidationError(
+            "clarify cannot replace an available successful tool observation"
+        )
     return {
         "action": action,
         "tool": None,

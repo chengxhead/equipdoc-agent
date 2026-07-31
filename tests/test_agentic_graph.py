@@ -126,19 +126,14 @@ def _observer_answer():
     )
 
 
-def _observer_search():
+def _observer_clarify():
     return json.dumps(
         {
-            "action": "call_tool",
-            "tool": "search_maintenance_knowledge",
-            "arguments": {
-                "query": "外圈故障 现场复核",
-                "equipment": "bearing",
-                "fault_type": "outer_race",
-                "top_k": 3,
-            },
-            "reason": "补充机理和现场复核证据",
-            "clarification_question": "",
+            "action": "clarify",
+            "tool": None,
+            "arguments": {},
+            "reason": "还需要更多工况",
+            "clarification_question": "请补充转速、负荷和润滑状况。",
         },
         ensure_ascii=False,
     )
@@ -426,7 +421,7 @@ class AgenticGraphTests(unittest.TestCase):
         self.assertIn("0.62", second_planner_prompt)
         self.assertIn("外圈故障", second_planner_prompt)
 
-    def test_diagnosis_observation_can_trigger_a_follow_up_search(self):
+    def test_diagnosis_result_cannot_be_hidden_by_clarification(self):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
             os.environ, {}, clear=True
         ):
@@ -439,7 +434,7 @@ class AgenticGraphTests(unittest.TestCase):
             llm = _FakeLLM(
                 [
                     _diagnosis_plan(),
-                    _observer_search(),
+                    _observer_clarify(),
                     _observer_answer(),
                     "EVIDENCE_IDS: E01",
                     _grounded_draft(),
@@ -501,6 +496,7 @@ class AgenticGraphTests(unittest.TestCase):
             ["diagnose_bearing", "search_maintenance_knowledge"],
         )
         self.assertIn("工具观察", result["messages"][-1].content)
+        self.assertIn("故障类别", result["messages"][-1].content)
         self.assertIn("综合解释", result["messages"][-1].content)
 
     def test_two_invalid_synthesis_drafts_fall_back_to_extracts(self):

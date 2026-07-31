@@ -237,6 +237,18 @@ def _collect_search_hits(observations: list[dict[str, Any]]) -> list[dict[str, A
     return list(unique.values())[:5]
 
 
+def _has_usable_tool_observation(observations: list[dict[str, Any]]) -> bool:
+    for observation in observations:
+        if observation.get("status") in {"error", "skipped"}:
+            continue
+        if observation.get("_tool_name") == "search_maintenance_knowledge":
+            if observation.get("hits"):
+                return True
+            continue
+        return True
+    return False
+
+
 def _render_safety_decision(decision: dict[str, str]) -> str:
     return (
         f"## 安全边界（{decision.get('policy_id', 'agentic_safety')}）\n\n"
@@ -505,6 +517,9 @@ def build_agentic_graph(
                 permitted_tools=permitted,
                 remaining_steps=remaining_steps,
                 has_signal=bool(state.get("signal_path")),
+                has_usable_observation=_has_usable_tool_observation(
+                    state.get("tool_observations") or []
+                ),
             )
             generation_path = "model"
             validation_error = ""

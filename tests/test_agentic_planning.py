@@ -269,6 +269,36 @@ class AgenticPlanningTests(unittest.TestCase):
         self.assertIn(".npy", decision["clarification_question"])
         self.assertNotIn("signal_path", decision["arguments"])
 
+    def test_successful_observation_cannot_be_hidden_by_clarification(self):
+        raw = json.dumps(
+            {
+                "action": "clarify",
+                "tool": None,
+                "arguments": {},
+                "reason": "还需要更多工况",
+                "clarification_question": "请补充转速和负荷。",
+            },
+            ensure_ascii=False,
+        )
+        with self.assertRaisesRegex(
+            PlanningValidationError,
+            "cannot replace an available successful tool observation",
+        ):
+            parse_observation_decision(
+                raw,
+                permitted_tools={"search_maintenance_knowledge"},
+                remaining_steps=2,
+                has_usable_observation=True,
+            )
+
+        decision = parse_observation_decision(
+            raw,
+            permitted_tools=set(),
+            remaining_steps=2,
+            has_usable_observation=False,
+        )
+        self.assertEqual(decision["action"], "clarify")
+
     def test_observation_prompt_redacts_structured_paths(self):
         messages = build_observation_messages(
             "下一步做什么？",

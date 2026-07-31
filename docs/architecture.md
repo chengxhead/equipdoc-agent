@@ -60,4 +60,4 @@ The local Qwen server does not accept OpenAI `tools` or `tool_choice`. P2.1 ther
 
 All uploaded files are copied to `runtime/uploads` under generated names. The diagnostic tool only reads files inside `data/samples` or `runtime/uploads`, with extension, size, type, shape, and finite-value checks.
 
-Demo and the published P2 baseline remain the default paths. P2.1 has local unit-test coverage but must not inherit P2 quality or latency metrics; its real-model results are reported separately only after AutoDL evaluation.
+Demo and the published P2 baseline remain the default paths. P2.1 must not inherit P2 quality or latency metrics. Its 2026-07-31 AutoDL fixed Smoke result is reported separately in [`p2-1-agentic-evaluation-report.md`](p2-1-agentic-evaluation-report.md): 8/8 automated checks passed, while 4/6 planner turns used deterministic fallback and all 4 evidence answers used extractive fallback. These figures are not human correctness or industrial diagnosis accuracy.

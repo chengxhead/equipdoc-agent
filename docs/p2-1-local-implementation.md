@@ -1,6 +1,6 @@
 # P2.1 Agentic 本地实现记录
 
-> 状态：核心链路已完成本地单元测试；真实 Qwen Smoke Test 和正式评测尚未执行。
+> 状态：核心链路、本地回归和 AutoDL 真实 Qwen + CNN 固定 Smoke Test 已完成；更大规模正式评测与人工复核尚未完成。
 
 ## 本轮实现
 
@@ -41,39 +41,50 @@ P2.1 使用严格 JSON 规划和本地工具执行，不是原生 Function Calli
 
 结果：
 
-- 77 项单元测试全部通过；
+- 80 项单元测试全部通过；
 - Demo 严格健康检查通过；
 - Demo Smoke Test 通过；
 - Agentic Smoke 数据集 Schema 校验通过：7 个案例、8 个回合；
 - 当前虚拟环境未安装可选开发依赖 `pytest` 和 `ruff`，因此验收使用标准库 `unittest`、`compileall` 和 `git diff --check`。
 
-## 尚未验证
+## AutoDL 真实 Smoke 验证
 
-- Qwen2.5-7B 对规划 JSON 的真实首轮成功率；
-- 真实工具选择、观察后决策和主动澄清表现；
-- 自然语言综合首轮通过率与抽取式降级率；
-- 多次模型调用后的端到端延迟、p50、p95 和调用次数；
+2026-07-31 在 RTX 4090 上运行 `data/eval/agentic_smoke.jsonl`，固定 7 个案例、8 个回合的最终自动结果为：
+
+- 严格自动通过率 8/8；
+- 意图、预期工具覆盖、工具白名单、审核门、审核载荷隐私、主动澄清、引用有效性、Grounded Answer Guard 和多轮记忆指标均为 100%；
+- 平均 / p50 / p95 端到端延迟为 10.107 / 9.733 / 22.286 秒；
+- 6 个进入规划器的 turn 中，2 个首轮规划成功，4 个使用确定性 fallback；
+- 4 个需要证据回答的 turn 全部使用 `extractive_fallback`。
+
+两类真实失败及修复过程也已保留：知识问题被过度澄清，以及成功诊断观察被澄清覆盖。最终报告见 [`p2-1-agentic-evaluation-report.md`](p2-1-agentic-evaluation-report.md)，原始证据见 [`../artifacts/p2_1/README.md`](../artifacts/p2_1/README.md)。
+
+## 仍未验证
+
+- 更大规模、冻结版本的正式 Agentic 评测；
 - 人工回答正确性、证据支持性和引用有用性；
 - CNN 工业诊断准确率。
 
 不得把 P2 的 14/20、91.25% 或 0.433 秒 p95 直接写成 P2.1 指标。
 
-## AutoDL 下一步
+## AutoDL 复现
 
-确认 Qwen 服务、CNN 权重和归一化文件可用后，先执行：
+确认 Qwen 服务、CNN 权重和归一化文件可用后，执行：
 
 ```bash
 python -m unittest discover -s tests -v
 python scripts/eval_agentic_full.py --validate-only
-python scripts/eval_agentic_full.py --limit 2 \
-  --output artifacts/p2_1/agentic_smoke_2.json
+python scripts/check_full_service.py \
+  --timeout 120 \
+  --output artifacts/p2_1/service_check.json
 ```
 
-检查前两个案例的规划、引用和延迟没有明显异常后，再运行完整 Smoke：
+运行完整严格 Smoke：
 
 ```bash
 python scripts/eval_agentic_full.py \
-  --output artifacts/p2_1/agentic_smoke.json
+  --output artifacts/p2_1/agentic_smoke.json \
+  --min-case-pass-rate 1.0
 ```
 
-真实结果需要保留原始 JSON、失败案例、Git commit、GPU 和依赖版本，再决定是否扩展正式评测集。
+真实结果需要继续保留原始 JSON、失败案例、Git commit、GPU 和依赖版本。下一阶段先完成人工复核，再扩展正式评测集。

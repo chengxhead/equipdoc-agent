@@ -169,7 +169,7 @@ Qwen 服务应提供 OpenAI-compatible `/chat/completions` 接口。模型继续
 
 Full 模式的知识问答会先做设备/故障聚焦检索，再按问题意图重排并去除单一切片冗余，由 Qwen 选择4个证据句ID，最终答案与 `doc_id#chunk_id` 引用由系统确定性渲染。模型首轮选择不合格时重试一次，再失败才按词法相关性返回最多5条原文。
 
-若要进入尚待真实模型评测的 P2.1 Agentic 链路，显式设置：
+若要进入 P2.1 Agentic 链路，显式设置：
 
 ```dotenv
 EQUIPDOC_DEMO_MODE=false
@@ -238,7 +238,7 @@ equipdoc-agent/
 python -m unittest discover -s tests -v
 ```
 
-当前本地实现包含77项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用和降级分支。
+当前本地实现包含80项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用和降级分支。
 
 `.github/workflows/ci.yml` 会在 GitHub 上使用 Python 3.10、3.11 和 3.12 自动运行单元测试、健康检查和 Demo Smoke Test。
 
@@ -261,10 +261,10 @@ python scripts/eval_safety_grounding.py --min-case-pass-rate 1.00
 | 高风险边界 | 20 条固定用例通过率 100% | 确定性规则、引用有效性与抽取证据一致性 |
 | RAG 检索 | Hit@5 91.0%，MRR@10 76.8% | 100 条旧测试；14篇知识文档；文档级相关性 |
 | Qwen Full 模式 | 严格通过14/20；关键词召回91.25%；p95 0.433秒 | RTX 4090；BM25；模型选择证据ID；引用原文匹配100%；非人工正确率 |
-| P2.1 Agentic | 待 AutoDL 真实模型实测 | 本地77项单元测试通过；不得沿用 P2 延迟和质量指标 |
+| P2.1 Agentic | 固定 Smoke 自动通过8/8；p95 22.286秒 | RTX 4090；真实 Qwen + CNN；6个规划 turn 中2个首轮成功、4个确定性 fallback；4个证据回答全部抽取式 fallback；非人工正确率 |
 | CNN | 暂不报告准确率 | 旧数据不具备可信文件级 Group Split 条件 |
 
-P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，P2 真实模型报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
+P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，P2 真实模型报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，P2.1 固定 Smoke 见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
 
 `artifacts/legacy/` 保存原 AutoDL 结果，用于保留实验链路，不作为最终性能结论：
 
@@ -288,15 +288,14 @@ P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1
 
 ## Roadmap
 
-下一阶段聚焦 P2.1 的真实模型验证和可信评测：
+下一阶段聚焦 P2.1 的正式评测和人工质量复核：
 
-1. 在 AutoDL 用真实 Qwen 运行 `agentic_smoke.jsonl`；
-2. 分析规划格式、工具选择、主动澄清、观察后决策和生成降级失败案例；
-3. 扩展正式 Agentic 评测集，并单独记录调用次数和端到端 p95；
-4. 完成人工回答正确性、证据支持性和引用有用性复核；
-5. 保留旧 CNN 数据泄漏限制，后续按原始文件和工况进行 Group Split；
-6. 为知识库补充权威来源和版本信息；
-7. 真实评测完成后再更新简历数据和产品案例。
+1. 使用 `artifacts/p2_1/agentic_smoke_human_review.xlsx` 完成8个 Smoke turn 的人工复核；
+2. 扩展并冻结正式 Agentic 评测集，单独记录模型首轮规划、fallback、调用次数和端到端 p95；
+3. 降低确定性规划 fallback 与抽取式回答 fallback 占比；
+4. 保留旧 CNN 数据泄漏限制，后续按原始文件和工况进行 Group Split；
+5. 为知识库补充权威来源和版本信息；
+6. 正式评测完成后再更新简历数据和产品案例。
 
 ## License
 

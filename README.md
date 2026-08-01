@@ -15,12 +15,12 @@
 | 项目维度 | 当前实现 |
 |---|---|
 | 目标场景 | 轴承振动信号辅助分析与运维报告生成 |
-| Agent 编排 | LangGraph 状态图、条件路由、可恢复中断；P2.1 可选受限规划闭环 |
+| Agent 编排 | LangGraph 状态图、条件路由、可恢复中断；P2.2 可选受限规划与结构化证据闭环 |
 | 人机协同 | 诊断工具执行前必须 Approve/Reject |
 | 工具能力 | `.npy` 信号校验、CNN 诊断接口、知识检索、报告生成 |
 | 安全边界 | 上传沙箱、大小与数值检查、路径白名单、显式降级 |
 | 运行方式 | 本地 Gradio、Docker、AutoDL Full 模式 |
-| 当前证据 | 单元测试、真实模型 Smoke、56-case / 64-turn 正式评测、失败演进和限制说明 |
+| 当前证据 | 120 项单元测试、三次 13-turn 面试 Demo、56-case / 64-turn 正式评测、失败演进和限制说明 |
 
 ## 为什么需要这个 Agent
 
@@ -127,6 +127,7 @@ http://127.0.0.1:7860
 | Demo | 公开仓库复现、工作流演示 | Demo 依赖、内置信号 | 固定故障案例，明确标注 |
 | Full P2 baseline | 复现已发布 P2 真实模型评测 | Qwen 服务、CNN 权重，可选向量库 | 规则路由，Qwen 选择证据句 ID |
 | Full P2.1 Agentic | 结构化规划与多工具实验 | 与 Full 相同 | Qwen 参与规划、观察后决策和证据化综合；仍受确定性安全门约束 |
+| Full P2.2 Agentic | 面试 Demo 质量与延迟优化 | 与 Full 相同 | 槽位化证据选择、结构化回答、逐句引用和可审计生成路径 |
 
 ## Docker Demo
 
@@ -167,7 +168,7 @@ EQUIPDOC_LLM_API_KEY=EMPTY
 
 Qwen 服务应提供 OpenAI-compatible `/chat/completions` 接口。模型继续保留在 AutoDL，不应把大模型权重上传 GitHub。
 
-Full 模式的知识问答会先做设备/故障聚焦检索，再按问题意图重排并去除单一切片冗余，由 Qwen 选择4个证据句ID，最终答案与 `doc_id#chunk_id` 引用由系统确定性渲染。模型首轮选择不合格时重试一次，再失败才按词法相关性返回最多5条原文。
+Full 模式的知识问答会先做设备/故障聚焦检索，再按问题意图重排并去除单一切片冗余。P2.2 将多子问题拆成机理、信号特征、现场复核和安全边界等证据槽位，最终答案与 `doc_id#chunk_id` 引用由系统按已校验证据结构化组织；不合格的模型草稿不会直接展示。
 
 若要进入 P2.1 Agentic 链路，显式设置：
 
@@ -177,11 +178,13 @@ EQUIPDOC_AGENTIC_MODE=true
 EQUIPDOC_AGENT_MAX_STEPS=3
 ```
 
-P2.1 使用“严格 JSON Prompt → 本地 Schema/白名单校验 → 系统执行工具”，不是原生 Function Calling。模型可以选择知识检索、只读信号检查和轴承诊断三个工具；只有诊断工具需要 Approve/Reject。规划或回答两次不合格时会明确进入确定性路由或抽取式答案降级，不展示未验证草稿。
+P2.1/P2.2 使用“严格 JSON Prompt → 本地 Schema/白名单校验 → 系统执行工具”，不是原生 Function Calling。模型可以选择知识检索、只读信号检查和轴承诊断三个工具；只有诊断工具需要 Approve/Reject。规划不合格时会明确进入确定性路由；回答草稿不满足引用和 grounded 约束时，P2.2 使用已通过槽位检查的结构化证据答案，不展示未验证草稿。
 
 2026-07-29 的 RTX 4090 实测基线完成20/20次真实模型调用：严格自动通过14/20，平均必需关键词召回91.25%，引用原文逐字匹配率100%，一次预热后的串行端到端 p50/p95 为0.414/0.433秒。结果同时暴露了多子问题证据选择不完整和严格关键词门槛假阴性，不能解释为人工正确率或工业诊断准确率。完整报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，复现步骤见 [`docs/p2-autodl-full-evaluation.md`](docs/p2-autodl-full-evaluation.md)。
 
 2026-08-01 的 P2.1 正式评测在冻结的56-case / 64-turn集上完成：最终自动合同通过64/64，平均 / p50 / p95 端到端延迟为7.472 / 8.541 / 16.758秒。52个规划turn中25个模型计划被首轮或重试接受、27个使用确定性fallback；38个证据回答全部使用`extractive_fallback`。完整失败演进为57/64 → 63/64 → 64/64，正式人工复核工作簿已生成但当前为0/64。因此这些数字不能解释为人工回答正确率或工业诊断准确率。完整报告见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)。
+
+同日完成的 P2.2 在不放宽冻结合同的前提下优化证据槽位、结构化回答和无效重试：13-turn 面试 Demo 连续三次均为13/13，最终正式回归仍为64/64，平均 / p50 / p95 延迟降至5.100 / 5.889 / 9.926秒；38个证据回答均为`structured_evidence_answer`，答案层`safe_fallback`为0。52个规划turn仍有26个确定性fallback，Demo人工复核当前为0/13，因此不能把自动通过率解释为人工正确率或模型规划准确率。完整报告见 [`docs/p2-2-demo-quality-evaluation-report.md`](docs/p2-2-demo-quality-evaluation-report.md)。
 
 ### 4. 可选：构建向量库
 
@@ -229,6 +232,7 @@ equipdoc-agent/
 | `EQUIPDOC_BEARING_MODEL_PATH` | CNN 权重路径 | `models/bearing_cnn.pth` |
 | `EQUIPDOC_UPLOAD_ROOT` | 上传沙箱 | `runtime/uploads` |
 | `EQUIPDOC_MAX_UPLOAD_MB` | 上传大小限制 | `8` |
+| `EQUIPDOC_UPLOAD_TTL_HOURS` | 应用暂存信号保留时长 | `24` |
 | `EQUIPDOC_RAG_DB_DIR` | Chroma 目录 | `vector_db/chroma_equipdoc` |
 | `EQUIPDOC_EMBEDDING_MODEL` | Embedding 模型 | `BAAI/bge-small-zh-v1.5` |
 
@@ -240,7 +244,7 @@ equipdoc-agent/
 python -m unittest discover -s tests -v
 ```
 
-当前本地实现包含93项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、完整相关证据覆盖、知识检索锚定、降级分支和正式评测集合同。
+当前本地实现包含120项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1/P2.2 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、槽位化证据覆盖、知识检索锚定、降级分支、隐私与运行时清理、索引清单和正式评测集合同。
 
 `.github/workflows/ci.yml` 会在 GitHub 上使用 Python 3.10、3.11 和 3.12 自动运行单元测试、健康检查和 Demo Smoke Test。
 
@@ -264,9 +268,10 @@ python scripts/eval_safety_grounding.py --min-case-pass-rate 1.00
 | RAG 检索 | Hit@5 91.0%，MRR@10 76.8% | 100 条旧测试；14篇知识文档；文档级相关性 |
 | Qwen Full 模式 | 严格通过14/20；关键词召回91.25%；p95 0.433秒 | RTX 4090；BM25；模型选择证据ID；引用原文匹配100%；非人工正确率 |
 | P2.1 Agentic | 正式自动合同通过64/64；p95 16.758秒 | RTX 4090；真实 Qwen + CNN；52个规划turn中25个模型计划被接受、27个确定性fallback；38个证据回答全部抽取式fallback；人工复核0/64 |
+| P2.2 Agentic | 三次Demo均13/13；正式自动合同64/64；p95 9.926秒 | RTX 4090；真实 Qwen + CNN；38个结构化证据回答；26/52确定性规划fallback；Demo人工复核0/13 |
 | CNN | 暂不报告准确率 | 旧数据不具备可信文件级 Group Split 条件 |
 
-P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，P2 真实模型报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，P2.1 Smoke、正式评测和失败演进见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)，P2.1 正式评测合同与执行记录见 [`docs/p2-1-formal-evaluation-plan.md`](docs/p2-1-formal-evaluation-plan.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
+P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，P2 真实模型报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，P2.1 Smoke、正式评测和失败演进见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)，P2.2 三次 Demo、最终正式回归和限制见 [`docs/p2-2-demo-quality-evaluation-report.md`](docs/p2-2-demo-quality-evaluation-report.md)，P2.1 正式评测合同与执行记录见 [`docs/p2-1-formal-evaluation-plan.md`](docs/p2-1-formal-evaluation-plan.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
 
 `artifacts/legacy/` 保存原 AutoDL 结果，用于保留实验链路，不作为最终性能结论：
 
@@ -281,21 +286,23 @@ P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1
 ## 安全与公开边界
 
 - UI只接受上传文件或内置样例，不接受服务器路径输入；
-- 上传文件被复制到 `runtime/uploads` 并使用随机文件名；
+- 上传文件被复制到 `runtime/uploads` 并使用随机文件名，过期暂存文件会自动清理；
 - 工具只允许读取 `data/samples` 和 `runtime/uploads`；
 - 仅接受受限大小的数值型一维 `.npy`；
+- 向量索引必须通过切片哈希、Embedding 模型和集合名清单校验，陈旧索引会禁用而不是静默使用；
+- Qwen 服务非回环地址默认要求 Bearer Token，GPU 推理并发数默认限制为1；
 - Demo 标签不能删除，避免固定案例被误解为真实推理；
 - 真实单位代码、内部手册、客户数据、模型权重和密钥不得进入仓库；
 - 当前知识库为项目笔记，正式评测前仍需补充权威来源和版本信息。
 
 ## Roadmap
 
-下一阶段聚焦人工质量复核和 P2.1 稳定性提升：
+下一阶段聚焦人工质量复核和 P2.2 剩余稳定性问题：
 
-1. 使用 `artifacts/p2_1/agentic_eval_human_review.xlsx` 完成64个正式turn的人工复核；
-2. 降低51.9%的确定性规划fallback占比；
-3. 提升自然语言证据综合通过率，减少38个证据回答全部抽取式fallback的现状；
-4. 多次重复正式集，记录生成稳定性和延迟波动；
+1. 使用 `artifacts/p2_2/demo_human_review.xlsx` 完成13个面试 Demo turn 的人工复核，并保留 P2.1 正式集0/64的未审状态；
+2. 降低当前50.0%的确定性规划fallback占比，分别统计模型首轮、重试和确定性路由质量；
+3. 提升带引用的模型自然综合通过率，避免把38个结构化证据答案误解为自由生成已稳定；
+4. 优化 `knowledge_qa` 延迟，其当前 p50 为7.055秒，仍高于6秒目标；
 5. 保留旧 CNN 数据泄漏限制，后续按原始文件和工况进行 Group Split；
 6. 为知识库补充权威来源和版本信息，人工复核完成后再更新简历质量指标。
 

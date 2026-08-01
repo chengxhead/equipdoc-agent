@@ -41,7 +41,7 @@ P2.1 使用严格 JSON 规划和本地工具执行，不是原生 Function Calli
 
 结果：
 
-- 92 项单元测试全部通过；
+- 93 项单元测试全部通过；
 - Demo 严格健康检查通过；
 - Demo Smoke Test 通过；
 - Agentic Smoke 数据集 Schema 校验通过：7 个案例、8 个回合；

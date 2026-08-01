@@ -238,7 +238,7 @@ equipdoc-agent/
 python -m unittest discover -s tests -v
 ```
 
-当前本地实现包含92项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、完整相关证据覆盖、知识检索锚定、降级分支和正式评测集合同。
+当前本地实现包含93项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、完整相关证据覆盖、知识检索锚定、降级分支和正式评测集合同。
 
 `.github/workflows/ci.yml` 会在 GitHub 上使用 Python 3.10、3.11 和 3.12 自动运行单元测试、健康检查和 Demo Smoke Test。
 

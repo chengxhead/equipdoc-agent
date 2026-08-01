@@ -99,6 +99,34 @@ class KnowledgeAnswerTests(unittest.TestCase):
         self.assertFalse(partial["valid"])
         self.assertEqual(partial["relevance_matches"], ["E01", "E02"])
 
+    def test_review_ranking_treats_inspection_as_field_review_evidence(self):
+        candidates = [
+            {
+                "evidence_id": f"E{index:02d}",
+                "citation": f"doc#chunk_{index}",
+                "text": text,
+                "focused_match": index <= 5,
+            }
+            for index, text in enumerate(
+                (
+                    "对于高风险介质，应优先按安全流程隔离和复核。",
+                    "管道泄漏可能引起局部振动。",
+                    "环境噪声会影响信号特征。",
+                    "不能只依赖单一算法判断。",
+                    "应结合压力、流量、声发射和人工巡检。",
+                    "滚动体故障不能只看单一峰值。",
+                ),
+                start=1,
+            )
+        ]
+        validation = validate_evidence_selection(
+            [],
+            candidates,
+            question="怀疑高风险介质管道泄漏时应如何复核？",
+        )
+        self.assertIn("E05", validation["recommended_ids"])
+        self.assertNotIn("E06", validation["recommended_ids"])
+
     def test_selected_evidence_is_rendered_with_source_citation(self):
         candidates = build_evidence_candidates(self.hits)
         answer = render_selected_evidence(candidates, ["E01"])

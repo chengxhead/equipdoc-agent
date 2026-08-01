@@ -140,7 +140,7 @@ def _normalize_evidence_text(text: str) -> str:
 
 def build_evidence_candidates(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
-    for item in hits:
+    for hit_index, item in enumerate(hits):
         citation = f"{item.get('doc_id', 'unknown')}#{item.get('chunk_id', 'unknown')}"
         text = str(item.get("text", "")).replace("\n", " ").strip()
         for unit in _answer_units(text):
@@ -152,7 +152,8 @@ def build_evidence_candidates(hits: list[dict[str, Any]]) -> list[dict[str, Any]
                     "evidence_id": f"E{len(candidates) + 1:02d}",
                     "citation": citation,
                     "text": excerpt,
-                    "focused_match": bool(item.get("focused_match")),
+                    "focused_match": bool(item.get("focused_match"))
+                    or hit_index < 2,
                 }
             )
     return candidates
@@ -166,7 +167,16 @@ def build_ranked_evidence_candidates(
     spectral_intent = any(term in question for term in ("频谱", "频率", "振动线索"))
     review_intent = any(term in question for term in ("现场", "复核", "检查", "建议"))
     spectral_terms = ("BPFO", "BPFI", "BSF", "FTF", "调制", "边频带", "倍频", "包络谱")
-    review_terms = ("复核", "检查", "润滑", "温度", "噪声", "传感器", "工况")
+    review_terms = (
+        "复核",
+        "检查",
+        "巡检",
+        "润滑",
+        "温度",
+        "噪声",
+        "传感器",
+        "工况",
+    )
     scored = []
     for index, item in enumerate(candidates):
         sentence_tokens = _selection_tokens(item["text"])
@@ -175,7 +185,9 @@ def build_ranked_evidence_candidates(
         if spectral_intent:
             intent_bonus += 3 * sum(term in item["text"] for term in spectral_terms)
         if review_intent:
-            intent_bonus += 3 * sum(term in item["text"] for term in review_terms)
+            intent_bonus += 3 * int(
+                any(term in item["text"] for term in review_terms)
+            )
         scored.append(
             (bool(item.get("focused_match")), overlap + intent_bonus, -index, item)
         )
@@ -253,6 +265,8 @@ def _selection_tokens(text: str) -> set[str]:
         aliases.append("维修决策")
     if any(marker in normalized for marker in ("未上传", "没有信号", "无信号")):
         aliases.append("原始振动信号")
+    if any(marker in normalized for marker in ("复核", "检查", "巡检")):
+        aliases.append("field_review")
     if aliases:
         normalized = f"{normalized} {' '.join(aliases)}"
     tokens = set(re.findall(r"[a-z0-9_]+", normalized))
@@ -271,9 +285,16 @@ def _rank_candidates_for_question(
     for index, item in enumerate(candidates):
         sentence_tokens = _selection_tokens(item["text"])
         score = len(query_tokens.intersection(sentence_tokens))
-        scored.append((score, -index, item["evidence_id"]))
+        scored.append(
+            (
+                bool(item.get("focused_match")),
+                score,
+                -index,
+                item["evidence_id"],
+            )
+        )
     scored.sort(reverse=True)
-    return [item[2] for item in scored[:limit]]
+    return [item[3] for item in scored[:limit]]
 
 
 def render_selected_evidence(

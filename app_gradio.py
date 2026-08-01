@@ -82,9 +82,12 @@ def submit(question, uploaded_file, use_sample, thread_id):
             text = "请诊断这段轴承振动信号并给出有依据的处理建议。"
         if not text:
             raise ValueError("请输入问题，或者选择/上传一个信号文件。")
-        payload = {"messages": [HumanMessage(content=text)]}
-        if signal_path:
-            payload["signal_path"] = str(signal_path)
+        payload = {
+            "messages": [HumanMessage(content=text)],
+            # Explicitly clear a signal retained by the same LangGraph thread
+            # when the user unchecks/removes the file on a later turn.
+            "signal_path": str(signal_path) if signal_path else "",
+        }
         result = AGENT.invoke(payload, config=_config(thread_id))
         payload = _interrupt_payload(result)
         if payload:

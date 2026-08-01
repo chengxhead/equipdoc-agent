@@ -16,7 +16,7 @@ from langgraph.types import interrupt
 from ..config import Settings
 from ..rag import KnowledgeRetriever
 from ..tools import analyze_bearing_signal
-from .policy import should_run_diagnosis
+from .policy import requests_diagnosis, should_run_diagnosis
 from .knowledge_answer import (
     build_ranked_evidence_candidates,
     build_citation_retry_messages,
@@ -156,22 +156,6 @@ def build_graph(settings: Settings | None = None):
 
         user_text = _last_human_text(messages)
         signal_path = state.get("signal_path")
-        if should_run_diagnosis(user_text, signal_path):
-            return {
-                "messages": [
-                    AIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "name": "diagnose_bearing",
-                                "args": {"signal_path": signal_path},
-                                "id": f"diagnose_{uuid4().hex}",
-                            }
-                        ],
-                    )
-                ]
-            }
-
         safety_decision = assess_high_risk_question(user_text)
         if safety_decision is not None:
             retriever = get_retriever()
@@ -203,6 +187,31 @@ def build_graph(settings: Settings | None = None):
                 "以上为可审计的规则与原文证据，不代表已经诊断或控制真实设备。"
             )
             return {"messages": [AIMessage(content=content)]}
+
+        if should_run_diagnosis(user_text, signal_path):
+            return {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "diagnose_bearing",
+                                "args": {"signal_path": signal_path},
+                                "id": f"diagnose_{uuid4().hex}",
+                            }
+                        ],
+                    )
+                ]
+            }
+
+        if not signal_path and requests_diagnosis(user_text):
+            return {
+                "messages": [
+                    AIMessage(
+                        content="请上传需要诊断的 .npy 轴承振动信号，或勾选仓库内置演示信号。"
+                    )
+                ]
+            }
 
         if settings.demo_mode:
             retriever = get_retriever()

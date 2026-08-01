@@ -20,7 +20,7 @@
 | 工具能力 | `.npy` 信号校验、CNN 诊断接口、知识检索、报告生成 |
 | 安全边界 | 上传沙箱、大小与数值检查、路径白名单、显式降级 |
 | 运行方式 | 本地 Gradio、Docker、AutoDL Full 模式 |
-| 当前证据 | 120 项单元测试、三次 13-turn 面试 Demo、56-case / 64-turn 正式评测、失败演进和限制说明 |
+| 当前证据 | 127 项单元测试、三次 13-turn 面试 Demo、56-case / 64-turn 正式评测、失败演进和限制说明 |
 
 ## 为什么需要这个 Agent
 
@@ -186,6 +186,8 @@ P2.1/P2.2 使用“严格 JSON Prompt → 本地 Schema/白名单校验 → 系�
 
 同日完成的 P2.2 在不放宽冻结合同的前提下优化证据槽位、结构化回答和无效重试：13-turn 面试 Demo 连续三次均为13/13，最终正式回归仍为64/64，平均 / p50 / p95 延迟降至5.100 / 5.889 / 9.926秒；38个证据回答均为`structured_evidence_answer`，答案层`safe_fallback`为0。52个规划turn仍有26个确定性fallback，Demo人工复核当前为0/13，因此不能把自动通过率解释为人工正确率或模型规划准确率。完整报告见 [`docs/p2-2-demo-quality-evaluation-report.md`](docs/p2-2-demo-quality-evaluation-report.md)。
 
+P2.2 收口后还完成了本地 Gradio 页面级验证，覆盖知识问题与样例信号的路由隔离、Approve/Reject、移除信号后的状态清理、审核载荷隐私和剩余寿命安全抢占；验证过程中发现的三个 UI/路由问题均已修复并加入回归测试。记录见 [`docs/p2-2-gradio-demo-validation.md`](docs/p2-2-gradio-demo-validation.md)。
+
 ### 4. 可选：构建向量库
 
 ```bash
@@ -244,7 +246,7 @@ equipdoc-agent/
 python -m unittest discover -s tests -v
 ```
 
-当前本地实现包含120项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1/P2.2 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、槽位化证据覆盖、知识检索锚定、降级分支、隐私与运行时清理、索引清单和正式评测集合同。
+当前本地实现包含127项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1/P2.2 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、槽位化证据覆盖、知识检索锚定、Demo 样例信号与知识问题的路由隔离、移除信号后的会话状态清理、安全策略优先级、降级分支、隐私与运行时清理、索引清单和正式评测集合同。
 
 `.github/workflows/ci.yml` 会在 GitHub 上使用 Python 3.10、3.11 和 3.12 自动运行单元测试、健康检查和 Demo Smoke Test。
 

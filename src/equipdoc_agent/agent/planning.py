@@ -71,6 +71,16 @@ _OBSERVATION_FIELDS = frozenset(
 )
 _STEP_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
 _WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(r"(?i)\b[A-Z]:[\\/][^\s\"']+")
+_SYSTEM_SIGNAL_DEPENDENCIES = frozenset(
+    {
+        "signal",
+        "signal_file",
+        "signal_path",
+        "input_signal",
+        "uploaded_signal",
+        "current_signal",
+    }
+)
 _MEMORY_FIELDS = (
     "current_equipment",
     "signal_file",
@@ -253,7 +263,11 @@ def _validate_plan_steps(
     value: Any,
     *,
     max_steps: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, str]],
+    list[dict[str, str]],
+]:
     if not isinstance(value, list):
         raise PlanningValidationError("plan must be a list")
     if len(value) > max_steps:
@@ -261,6 +275,7 @@ def _validate_plan_steps(
 
     normalized: list[dict[str, Any]] = []
     removed_arguments: list[dict[str, str]] = []
+    removed_dependencies: list[dict[str, str]] = []
     seen_ids: set[str] = set()
     for index, raw_step in enumerate(value):
         if not isinstance(raw_step, dict):
@@ -301,6 +316,14 @@ def _validate_plan_steps(
                 required=True,
                 limit=32,
             )
+            if (
+                tool in {"diagnose_bearing", "inspect_signal"}
+                and dependency_id.lower() in _SYSTEM_SIGNAL_DEPENDENCIES
+            ):
+                removed_dependencies.append(
+                    {"step_id": step_id, "dependency": dependency_id}
+                )
+                continue
             if dependency_id not in depends_on:
                 depends_on.append(dependency_id)
         normalized.append(
@@ -312,7 +335,7 @@ def _validate_plan_steps(
             }
         )
     _validate_dependencies(normalized)
-    return normalized, removed_arguments
+    return normalized, removed_arguments, removed_dependencies
 
 
 def _validate_intent_tool_consistency(intent: str, plan: list[dict[str, Any]]) -> None:
@@ -530,7 +553,7 @@ def parse_and_validate_plan(
     intent = _clean_text(raw.get("intent"), "intent", required=True, limit=64)
     if intent not in ALLOWED_INTENTS:
         raise PlanningValidationError(f"Unknown intent: {intent}")
-    plan_steps, removed_arguments = _validate_plan_steps(
+    plan_steps, removed_arguments, removed_dependencies = _validate_plan_steps(
         raw.get("plan", []),
         max_steps=max_steps,
     )
@@ -552,6 +575,7 @@ def parse_and_validate_plan(
         "validation": {
             "source": "model",
             "removed_arguments": removed_arguments,
+            "removed_dependencies": removed_dependencies,
         },
     }
 
@@ -678,7 +702,9 @@ JSON Schema 示例：
 
 diagnose_bearing 和 inspect_signal 的 arguments 必须为空对象。
 search_maintenance_knowledge 只允许 query、equipment、fault_type、top_k；
-top_k 必须是 1 到 5 的整数。"""
+top_k 必须是 1 到 5 的整数。
+depends_on 只能引用同一 plan 中此前出现的 step_id；单步骤计划必须使用空数组 []。
+signal、signal_file、signal_path 都是系统资源，不是 step_id，绝对不能写入 depends_on。"""
     context = {
         "user_question": _clean_text(user_text, "user_text", required=True, limit=4000),
         "signal_available": bool(has_signal),
@@ -687,6 +713,12 @@ top_k 必须是 1 到 5 的整数。"""
     return [
         SystemMessage(content=system_prompt),
         HumanMessage(content=json.dumps(context, ensure_ascii=False, indent=2)),
+        HumanMessage(
+            content=(
+                "现在只输出一个完整 JSON 对象，必须以 { 开头、以 } 结尾；"
+                "不要回答 user_question，不要输出 Markdown、代码围栏或解释。"
+            )
+        ),
     ]
 
 

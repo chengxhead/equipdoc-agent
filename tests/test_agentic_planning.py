@@ -188,6 +188,40 @@ class AgenticPlanningTests(unittest.TestCase):
             [{"step_id": "S1", "field": "signal_path"}],
         )
 
+    def test_system_signal_resource_is_removed_from_signal_tool_dependencies(self):
+        text = _plan_text(
+            intent="diagnosis",
+            plan=[
+                {
+                    "step_id": "S1",
+                    "tool": "diagnose_bearing",
+                    "arguments": {},
+                    "depends_on": ["signal_file"],
+                }
+            ],
+        )
+        plan = parse_and_validate_plan(text, has_signal=True)
+        self.assertEqual(plan["plan"][0]["depends_on"], [])
+        self.assertEqual(
+            plan["validation"]["removed_dependencies"],
+            [{"step_id": "S1", "dependency": "signal_file"}],
+        )
+
+    def test_unknown_non_resource_dependency_is_still_rejected(self):
+        text = _plan_text(
+            intent="diagnosis",
+            plan=[
+                {
+                    "step_id": "S1",
+                    "tool": "diagnose_bearing",
+                    "arguments": {},
+                    "depends_on": ["untrusted_external_step"],
+                }
+            ],
+        )
+        with self.assertRaisesRegex(PlanningValidationError, "unknown steps"):
+            parse_and_validate_plan(text, has_signal=True)
+
     def test_unknown_tool_and_unknown_arguments_are_rejected(self):
         unknown_tool = _plan_text(
             plan=[
@@ -262,6 +296,9 @@ class AgenticPlanningTests(unittest.TestCase):
         )
         combined = "\n".join(str(message.content) for message in messages)
         self.assertIn("plan 最多 3 步", combined)
+        self.assertIn("signal_file", combined)
+        self.assertIn("不是 step_id", combined)
+        self.assertIn("必须以 { 开头", str(messages[-1].content))
         self.assertIn("safe.npy", combined)
         self.assertNotIn("C:\\secret", combined)
 

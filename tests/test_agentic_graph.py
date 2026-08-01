@@ -435,6 +435,34 @@ class AgenticGraphTests(unittest.TestCase):
             pending["planning_metadata"]["validation_errors"][0],
         )
 
+    def test_signal_file_dependency_is_safely_normalized_before_review(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
+            root = Path(temp_dir)
+            sample_root = root / "data/samples"
+            sample_root.mkdir(parents=True)
+            sample = sample_root / "diagnose.npy"
+            np.save(sample, np.arange(1024, dtype=np.float32))
+            settings = self._settings(root)
+            raw_plan = json.loads(_diagnosis_plan())
+            raw_plan["plan"][0]["depends_on"] = ["signal_file"]
+            llm = _FakeLLM([json.dumps(raw_plan, ensure_ascii=False)])
+            graph = build_agentic_graph(settings, llm=llm)
+            pending = graph.invoke(
+                {
+                    "messages": [HumanMessage(content="请诊断这段轴承振动信号。")],
+                    "signal_path": str(sample),
+                },
+                config={"configurable": {"thread_id": "agentic_signal_dependency"}},
+            )
+
+        self.assertIn("__interrupt__", pending)
+        self.assertEqual(pending["planning_metadata"]["generation_path"], "first_pass")
+        self.assertEqual(pending["current_plan"]["plan"][0]["depends_on"], [])
+        self.assertEqual(
+            pending["current_plan"]["validation"]["removed_dependencies"],
+            [{"step_id": "S1", "dependency": "signal_file"}],
+        )
+
     def test_completed_single_tool_skips_observer_at_max_steps(self):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)

@@ -186,6 +186,8 @@ P2.1/P2.2 使用“严格 JSON Prompt → 本地 Schema/白名单校验 → 系�
 
 同日完成的 P2.2 在不放宽冻结合同的前提下优化证据槽位、结构化回答和无效重试：13-turn 面试 Demo 连续三次均为13/13，最终正式回归仍为64/64，平均 / p50 / p95 延迟降至5.100 / 5.889 / 9.926秒；38个证据回答均为`structured_evidence_answer`，答案层`safe_fallback`为0。52个规划turn仍有26个确定性fallback，Demo人工复核当前为0/13，因此不能把自动通过率解释为人工正确率或模型规划准确率。完整报告见 [`docs/p2-2-demo-quality-evaluation-report.md`](docs/p2-2-demo-quality-evaluation-report.md)。
 
+随后针对 Full Gradio 现场暴露的 JSON 计划与 `signal_file` 依赖问题增加了规划热修复：两个指定演示问题连续三轮均不再显示规划降级，当前共有130项单元测试；热修复代码上的13-turn Demo 为13/13，但64-turn正式回归为63/64，仍有1个诊断回答未通过引用与 Grounded Guard。该结果不能替代上面的 Fix 3 归档快照，也不能把当前代码描述为64/64；本次按用户决定保留这一已知回归并直接进行 Git 收口。
+
 P2.2 收口后还完成了本地 Gradio 页面级验证，覆盖知识问题与样例信号的路由隔离、Approve/Reject、移除信号后的状态清理、审核载荷隐私和剩余寿命安全抢占；验证过程中发现的三个 UI/路由问题均已修复并加入回归测试。记录见 [`docs/p2-2-gradio-demo-validation.md`](docs/p2-2-gradio-demo-validation.md)。
 
 ### 4. 可选：构建向量库
@@ -246,7 +248,7 @@ equipdoc-agent/
 python -m unittest discover -s tests -v
 ```
 
-当前本地实现包含127项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1/P2.2 规划校验、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、槽位化证据覆盖、知识检索锚定、Demo 样例信号与知识问题的路由隔离、移除信号后的会话状态清理、安全策略优先级、降级分支、隐私与运行时清理、索引清单和正式评测集合同。
+当前本地实现包含130项 `unittest`，覆盖旧 Demo/P2 回归以及 P2.1/P2.2 规划校验、系统信号依赖归一化、未知依赖拒绝、三工具权限、人工审核、最大步数、多轮记忆、逐句引用、槽位化证据覆盖、知识检索锚定、Demo 样例信号与知识问题的路由隔离、移除信号后的会话状态清理、安全策略优先级、降级分支、隐私与运行时清理、索引清单和正式评测集合同。
 
 `.github/workflows/ci.yml` 会在 GitHub 上使用 Python 3.10、3.11 和 3.12 自动运行单元测试、健康检查和 Demo Smoke Test。
 
@@ -271,6 +273,7 @@ python scripts/eval_safety_grounding.py --min-case-pass-rate 1.00
 | Qwen Full 模式 | 严格通过14/20；关键词召回91.25%；p95 0.433秒 | RTX 4090；BM25；模型选择证据ID；引用原文匹配100%；非人工正确率 |
 | P2.1 Agentic | 正式自动合同通过64/64；p95 16.758秒 | RTX 4090；真实 Qwen + CNN；52个规划turn中25个模型计划被接受、27个确定性fallback；38个证据回答全部抽取式fallback；人工复核0/64 |
 | P2.2 Agentic | 三次Demo均13/13；正式自动合同64/64；p95 9.926秒 | RTX 4090；真实 Qwen + CNN；38个结构化证据回答；26/52确定性规划fallback；Demo人工复核0/13 |
+| P2.2 Live规划热修复 | Demo 13/13；正式自动合同63/64；p95 8.954秒 | 指定Full页面问题已无规划降级；正式集仍有1个诊断引用/Guard回归，尚未定位 |
 | CNN | 暂不报告准确率 | 旧数据不具备可信文件级 Group Split 条件 |
 
 P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，P2 真实模型报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，P2.1 Smoke、正式评测和失败演进见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)，P2.2 三次 Demo、最终正式回归和限制见 [`docs/p2-2-demo-quality-evaluation-report.md`](docs/p2-2-demo-quality-evaluation-report.md)，P2.1 正式评测合同与执行记录见 [`docs/p2-1-formal-evaluation-plan.md`](docs/p2-1-formal-evaluation-plan.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
@@ -302,7 +305,7 @@ P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1
 下一阶段聚焦人工质量复核和 P2.2 剩余稳定性问题：
 
 1. 使用 `artifacts/p2_2/demo_human_review.xlsx` 完成13个面试 Demo turn 的人工复核，并保留 P2.1 正式集0/64的未审状态；
-2. 降低当前50.0%的确定性规划fallback占比，分别统计模型首轮、重试和确定性路由质量；
+2. 先定位当前 Live 热修复代码的1个正式诊断回归，再分别报告 Fix 3 快照与 Live 代码的首轮、重试和确定性路由分布；
 3. 提升带引用的模型自然综合通过率，避免把38个结构化证据答案误解为自由生成已稳定；
 4. 优化 `knowledge_qa` 延迟，其当前 p50 为7.055秒，仍高于6秒目标；
 5. 保留旧 CNN 数据泄漏限制，后续按原始文件和工况进行 Group Split；

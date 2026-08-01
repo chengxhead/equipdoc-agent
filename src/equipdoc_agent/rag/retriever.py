@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Settings
+from .index_manifest import expected_index_manifest, read_index_manifest
 
 
 def _tokenize(text: str) -> list[str]:
@@ -107,6 +108,16 @@ class KnowledgeRetriever:
         if not self.settings.rag_db_dir.exists():
             self.warnings.append("vector DB unavailable; dense retrieval disabled")
             return
+        if not self.settings.rag_chunks_path.is_file():
+            self.warnings.append("knowledge chunks unavailable; dense retrieval disabled")
+            return
+        expected_manifest = expected_index_manifest(self.settings, len(self.chunks))
+        actual_manifest = read_index_manifest(self.settings.rag_db_dir)
+        if actual_manifest != expected_manifest:
+            self.warnings.append(
+                "vector DB manifest is missing or stale; dense retrieval disabled until rebuild"
+            )
+            return
         try:
             import chromadb
             from sentence_transformers import SentenceTransformer
@@ -160,7 +171,9 @@ class KnowledgeRetriever:
             return []
         embedding = self._embedding_model.encode([query], normalize_embeddings=True).tolist()[0]
         raw_filters = {
-            key: value for key, value in (filters or {}).items() if value not in {None, "", "general"}
+            key: value
+            for key, value in (filters or {}).items()
+            if value not in {None, "", "general"}
         }
         where = None
         if len(raw_filters) == 1:
@@ -211,9 +224,10 @@ class KnowledgeRetriever:
         )
         selected = []
         per_doc: dict[str, int] = {}
+        per_doc_limit = 3 if final_k >= 5 else 2
         for item in ranked:
             doc_id = str(item.get("doc_id", ""))
-            if per_doc.get(doc_id, 0) >= 2:
+            if per_doc.get(doc_id, 0) >= per_doc_limit:
                 continue
             selected.append(item)
             per_doc[doc_id] = per_doc.get(doc_id, 0) + 1
@@ -221,7 +235,5 @@ class KnowledgeRetriever:
                 break
         if len(selected) < final_k:
             selected_ids = {item.get("chunk_id") for item in selected}
-            selected.extend(
-                item for item in ranked if item.get("chunk_id") not in selected_ids
-            )
+            selected.extend(item for item in ranked if item.get("chunk_id") not in selected_ids)
         return selected[:final_k]

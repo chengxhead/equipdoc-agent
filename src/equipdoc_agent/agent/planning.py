@@ -79,6 +79,8 @@ _MEMORY_FIELDS = (
     "last_evidence",
     "pending_clarification",
     "completed_tools",
+    "attempted_tools",
+    "failed_tools",
 )
 
 
@@ -568,6 +570,16 @@ def parse_and_validate_plan(
         raise PlanningValidationError(
             f"Explicit current-signal request requires {requested_signal_intent}, "
             f"not {intent}"
+        )
+    if (
+        has_signal
+        and requested_signal_intent is None
+        and intent in {"diagnosis", "signal_inspection"}
+        and user_text is not None
+        and _is_self_contained_knowledge_question(user_text)
+    ):
+        raise PlanningValidationError(
+            "A remembered signal cannot turn a self-contained knowledge question into a signal tool request"
         )
 
     if intent in {"diagnosis", "signal_inspection"} and not has_signal:

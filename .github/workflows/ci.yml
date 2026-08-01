@@ -34,7 +34,10 @@ jobs:
       - name: Install demo dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[demo]"
+          python -m pip install -e ".[demo,dev]"
+
+      - name: Run static checks
+        run: ruff check app_gradio.py src scripts tests
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
@@ -66,3 +69,29 @@ jobs:
           python scripts/eval_safety_grounding.py
           --output runtime/p1_safety_grounding.json
           --min-case-pass-rate 1.00
+
+  optional-lexical-tests:
+    name: Optional lexical retrieval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install optional lexical dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[demo,dev]" rank-bm25 jieba
+
+      - name: Run retrieval tests and gate
+        run: |
+          python -m unittest tests.test_retriever tests.test_rag_index_manifest tests.test_agentic_eval_dataset -v
+          python scripts/eval_rag_retrieval.py --output runtime/p1_rag_optional.json --min-hit-at-5 0.90 --min-mrr-at-10 0.75

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Settings
+from ..privacy import redact_sensitive_text
 from ..rag import KnowledgeRetriever
 from ..tools import analyze_bearing_signal, inspect_bearing_signal
 from .planning import ALLOWED_EQUIPMENT, ALLOWED_FAULT_TYPES, ALLOWED_TOOLS
@@ -136,5 +137,8 @@ def execute_agentic_tool(
         return {
             "_tool_name": tool_name,
             "status": "error",
-            "error": f"{type(exc).__name__}: {exc}",
+            "error": redact_sensitive_text(
+                f"{type(exc).__name__}: {exc}",
+                project_root=settings.project_root,
+            ),
         }

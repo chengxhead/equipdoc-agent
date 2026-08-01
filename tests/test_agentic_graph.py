@@ -12,7 +12,11 @@ import numpy as np
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
-from equipdoc_agent.agent.agentic_graph import build_agentic_graph
+from equipdoc_agent.agent.agentic_graph import (
+    _collect_search_hits,
+    _merge_memory_after_tool,
+    build_agentic_graph,
+)
 from equipdoc_agent.config import Settings
 
 
@@ -41,7 +45,26 @@ class _FakeRetriever:
                 "text": "外圈缺陷会产生周期性冲击。",
                 "rrf_score": 0.02,
                 "lexical_score": 4.0,
-            }
+            },
+            {
+                "doc_id": "bearing_review",
+                "chunk_id": "bearing_review_c001",
+                "title": "轴承现场复核",
+                "text": "现场应复核安装松动、润滑状态、温度和异常噪声。",
+                "rrf_score": 0.01,
+                "lexical_score": 2.0,
+            },
+            {
+                "doc_id": "maintenance_boundary",
+                "chunk_id": "maintenance_boundary_c001",
+                "title": "诊断边界",
+                "text": (
+                    "样本和工况差异会导致模型置信度变化；"
+                    "模型置信度不能替代现场复核，也不足以直接推断剩余寿命。"
+                ),
+                "rrf_score": 0.005,
+                "lexical_score": 1.0,
+            },
         ][:top_k]
 
 
@@ -147,6 +170,26 @@ def _grounded_draft():
     )
 
 
+def _grounded_draft_with_review():
+    return (
+        "## 综合解释\n\n"
+        "外圈缺陷会产生周期性冲击 "
+        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]\n\n"
+        "## 现场复核\n\n"
+        "现场应复核安装松动、润滑状态、温度和异常噪声 "
+        "[bearing_review#bearing_review_c001]"
+    )
+
+
+def _grounded_confidence_draft():
+    return (
+        "样本和工况差异会导致模型置信度变化 "
+        "[maintenance_boundary#maintenance_boundary_c001]\n\n"
+        "模型置信度不能替代现场复核，也不足以直接推断剩余寿命 "
+        "[maintenance_boundary#maintenance_boundary_c001]"
+    )
+
+
 class AgenticGraphTests(unittest.TestCase):
     def _settings(self, root: Path, **overrides):
         settings = replace(
@@ -157,16 +200,41 @@ class AgenticGraphTests(unittest.TestCase):
         )
         return replace(settings, **overrides)
 
+    def test_later_targeted_search_hits_are_not_truncated(self):
+        observations = [
+            {
+                "_tool_name": "search_maintenance_knowledge",
+                "hits": [{"chunk_id": f"generic_{index}"} for index in range(5)],
+            },
+            {
+                "_tool_name": "search_maintenance_knowledge",
+                "hits": [{"chunk_id": "targeted", "focused_match": True}],
+            },
+        ]
+        merged = _collect_search_hits(observations)
+        self.assertEqual(len(merged), 6)
+        self.assertIn("targeted", {item["chunk_id"] for item in merged})
+
+    def test_failed_tool_is_not_recorded_as_completed(self):
+        memory = _merge_memory_after_tool(
+            {"last_evidence": [{"citation": "old#c001"}]},
+            {
+                "_tool_name": "search_maintenance_knowledge",
+                "status": "error",
+                "error": "temporary failure",
+            },
+        )
+        self.assertNotIn("search_maintenance_knowledge", memory.get("completed_tools", []))
+        self.assertIn("search_maintenance_knowledge", memory["attempted_tools"])
+        self.assertIn("search_maintenance_knowledge", memory["failed_tools"])
+        self.assertEqual(memory["last_evidence"], [{"citation": "old#c001"}])
+
     def test_knowledge_plan_runs_search_without_review(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             settings = self._settings(Path(temp_dir))
             llm = _FakeLLM(
                 [
                     _knowledge_plan(),
-                    _observer_answer(),
-                    "EVIDENCE_IDS: E01",
                     _grounded_draft(),
                 ]
             )
@@ -189,7 +257,8 @@ class AgenticGraphTests(unittest.TestCase):
             "search_maintenance_knowledge",
         )
         self.assertIn("周期性冲击", result["messages"][-1].content)
-        self.assertEqual(len(llm.calls), 4)
+        self.assertEqual(len(llm.calls), 2)
+        self.assertEqual(result["answer_metadata"]["llm_call_count"], 2)
         self.assertEqual(
             result["answer_metadata"]["answer_guard"]["generation_path"],
             "grounded_synthesis",
@@ -207,17 +276,13 @@ class AgenticGraphTests(unittest.TestCase):
             },
             ensure_ascii=False,
         )
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             settings = self._settings(Path(temp_dir))
             llm = _FakeLLM(
                 [
                     overclarification,
                     _knowledge_plan(),
-                    _observer_answer(),
-                    "EVIDENCE_IDS: E01",
-                    _grounded_draft(),
+                    _grounded_draft_with_review(),
                 ]
             )
             graph = build_agentic_graph(
@@ -248,19 +313,17 @@ class AgenticGraphTests(unittest.TestCase):
             "self-contained maintenance knowledge question",
             result["planning_metadata"]["validation_errors"][0],
         )
-        self.assertEqual(len(llm.calls), 5)
+        self.assertEqual(len(llm.calls), 3)
 
     def test_inspect_signal_is_read_only_and_does_not_interrupt(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
             sample = sample_root / "inspect.npy"
             np.save(sample, np.arange(32, dtype=np.float32))
             settings = self._settings(root)
-            llm = _FakeLLM([_inspection_plan(), _observer_answer()])
+            llm = _FakeLLM([_inspection_plan()])
             graph = build_agentic_graph(settings, llm=llm)
             result = graph.invoke(
                 {
@@ -276,9 +339,7 @@ class AgenticGraphTests(unittest.TestCase):
         self.assertIn("inspect.npy", result["messages"][-1].content)
 
     def test_diagnosis_requires_approve_and_reject_skips_tool(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -286,21 +347,32 @@ class AgenticGraphTests(unittest.TestCase):
             np.save(sample, np.arange(1024, dtype=np.float32))
             settings = self._settings(root)
 
-            approve_llm = _FakeLLM([_diagnosis_plan(), _observer_answer()])
+            approve_llm = _FakeLLM([_diagnosis_plan(), _grounded_draft()])
             approve_graph = build_agentic_graph(settings, llm=approve_llm)
             config = {"configurable": {"thread_id": "agentic_approve"}}
+
+            def execute_approved(tool_name, arguments, **_):
+                if tool_name == "diagnose_bearing":
+                    return {
+                        "_tool_name": "diagnose_bearing",
+                        "status": "ok",
+                        "signal_file": "diagnose.npy",
+                        "fault_type": "外圈故障",
+                        "confidence": 0.62,
+                        "probabilities": {},
+                        "signal": {"samples": 1024, "rms": 1.0},
+                        "warning": "需要现场复核",
+                    }
+                return {
+                    "_tool_name": "search_maintenance_knowledge",
+                    "status": "ok",
+                    "query": arguments["query"],
+                    "hits": _FakeRetriever().search(arguments["query"], top_k=5),
+                }
+
             with patch(
                 "equipdoc_agent.agent.agentic_graph.execute_agentic_tool",
-                return_value={
-                    "_tool_name": "diagnose_bearing",
-                    "status": "ok",
-                    "signal_file": "diagnose.npy",
-                    "fault_type": "外圈故障",
-                    "confidence": 0.62,
-                    "probabilities": {},
-                    "signal": {"samples": 1024, "rms": 1.0},
-                    "warning": "需要现场复核",
-                },
+                side_effect=execute_approved,
             ) as execute:
                 pending = approve_graph.invoke(
                     {
@@ -311,16 +383,14 @@ class AgenticGraphTests(unittest.TestCase):
                 )
                 self.assertIn("__interrupt__", pending)
                 result = approve_graph.invoke(Command(resume="approve"), config=config)
-                execute.assert_called_once()
+                self.assertEqual(execute.call_count, 2)
             self.assertEqual(result["session_memory"]["last_diagnosis"]["confidence"], 0.62)
             self.assertIn("62.00%", result["messages"][-1].content)
 
             reject_llm = _FakeLLM([_diagnosis_plan()])
             reject_graph = build_agentic_graph(settings, llm=reject_llm)
             reject_config = {"configurable": {"thread_id": "agentic_reject"}}
-            with patch(
-                "equipdoc_agent.agent.agentic_graph.execute_agentic_tool"
-            ) as execute:
+            with patch("equipdoc_agent.agent.agentic_graph.execute_agentic_tool") as execute:
                 reject_graph.invoke(
                     {
                         "messages": [HumanMessage(content="请诊断轴承信号")],
@@ -336,9 +406,7 @@ class AgenticGraphTests(unittest.TestCase):
             self.assertIn("取消", rejected["messages"][-1].content)
 
     def test_explicit_signal_diagnosis_retries_a_knowledge_only_plan(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -351,10 +419,7 @@ class AgenticGraphTests(unittest.TestCase):
                 {
                     "messages": [
                         HumanMessage(
-                            content=(
-                                "先用分类模型分析这段轴承振动，"
-                                "再用知识证据解释结果。"
-                            )
+                            content=("先用分类模型分析这段轴承振动，再用知识证据解释结果。")
                         )
                     ],
                     "signal_path": str(sample),
@@ -370,10 +435,8 @@ class AgenticGraphTests(unittest.TestCase):
             pending["planning_metadata"]["validation_errors"][0],
         )
 
-    def test_max_steps_prevents_observer_from_calling_another_tool(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+    def test_completed_single_tool_skips_observer_at_max_steps(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -391,16 +454,11 @@ class AgenticGraphTests(unittest.TestCase):
             )
 
         self.assertEqual(result["tool_step_count"], 1)
-        self.assertEqual(
-            result["observation_metadata"]["generation_path"],
-            "max_steps_stop",
-        )
+        self.assertEqual(result["observation_metadata"], {})
         self.assertEqual(len(llm.calls), 1)
 
     def test_same_thread_memory_reaches_the_next_planner(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -410,11 +468,9 @@ class AgenticGraphTests(unittest.TestCase):
             llm = _FakeLLM(
                 [
                     _diagnosis_plan(),
-                    _observer_answer(),
-                    _knowledge_plan(),
-                    _observer_answer(),
-                    "EVIDENCE_IDS: E01",
                     _grounded_draft(),
+                    _knowledge_plan(),
+                    _grounded_confidence_draft(),
                 ]
             )
             graph = build_agentic_graph(
@@ -423,18 +479,29 @@ class AgenticGraphTests(unittest.TestCase):
                 retriever=_FakeRetriever(),
             )
             config = {"configurable": {"thread_id": "agentic_memory"}}
+
+            def execute_memory(tool_name, arguments, **_):
+                if tool_name == "diagnose_bearing":
+                    return {
+                        "_tool_name": "diagnose_bearing",
+                        "status": "ok",
+                        "signal_file": "memory.npy",
+                        "fault_type": "外圈故障",
+                        "confidence": 0.62,
+                        "probabilities": {},
+                        "signal": {"samples": 1024},
+                        "warning": "采样长度较短",
+                    }
+                return {
+                    "_tool_name": "search_maintenance_knowledge",
+                    "status": "ok",
+                    "query": arguments["query"],
+                    "hits": _FakeRetriever().search(arguments["query"], top_k=5),
+                }
+
             with patch(
                 "equipdoc_agent.agent.agentic_graph.execute_agentic_tool",
-                return_value={
-                    "_tool_name": "diagnose_bearing",
-                    "status": "ok",
-                    "signal_file": "memory.npy",
-                    "fault_type": "外圈故障",
-                    "confidence": 0.62,
-                    "probabilities": {},
-                    "signal": {"samples": 1024},
-                    "warning": "采样长度较短",
-                },
+                side_effect=execute_memory,
             ):
                 graph.invoke(
                     {
@@ -449,17 +516,13 @@ class AgenticGraphTests(unittest.TestCase):
                 config=config,
             )
 
-        second_planner_prompt = "\n".join(
-            str(message.content) for message in llm.calls[2]
-        )
+        second_planner_prompt = "\n".join(str(message.content) for message in llm.calls[2])
         self.assertIn("last_diagnosis", second_planner_prompt)
         self.assertIn("0.62", second_planner_prompt)
         self.assertIn("外圈故障", second_planner_prompt)
 
     def test_diagnosis_result_cannot_be_hidden_by_clarification(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -469,9 +532,6 @@ class AgenticGraphTests(unittest.TestCase):
             llm = _FakeLLM(
                 [
                     _diagnosis_plan(),
-                    _observer_clarify(),
-                    _observer_answer(),
-                    "EVIDENCE_IDS: E01",
                     _grounded_draft(),
                 ]
             )
@@ -501,10 +561,7 @@ class AgenticGraphTests(unittest.TestCase):
                         {
                             "doc_id": "bearing_outer_race_fault",
                             "chunk_id": "bearing_outer_race_fault_c001",
-                            "citation": (
-                                "bearing_outer_race_fault#"
-                                "bearing_outer_race_fault_c001"
-                            ),
+                            "citation": ("bearing_outer_race_fault#bearing_outer_race_fault_c001"),
                             "title": "轴承外圈故障",
                             "text": "外圈缺陷会产生周期性冲击。",
                         }
@@ -534,17 +591,17 @@ class AgenticGraphTests(unittest.TestCase):
         self.assertIn("故障类别", result["messages"][-1].content)
         self.assertIn("综合解释", result["messages"][-1].content)
 
-    def test_two_invalid_synthesis_drafts_fall_back_to_extracts(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+    def test_two_invalid_synthesis_drafts_use_structured_evidence(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             settings = self._settings(Path(temp_dir))
             llm = _FakeLLM(
                 [
                     _knowledge_plan(),
-                    _observer_answer(),
-                    "EVIDENCE_IDS: E01",
-                    "第一版没有引用",
+                    (
+                        "外圈缺陷会产生周期性冲击 "
+                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]\n"
+                        "现场还需要继续检查。"
+                    ),
                     "第二版仍然没有引用",
                 ]
             )
@@ -559,25 +616,58 @@ class AgenticGraphTests(unittest.TestCase):
             )
 
         final = result["messages"][-1]
-        self.assertIn("回答降级", final.content)
+        self.assertIn("按证据组织的回答", final.content)
         self.assertIn("周期性冲击", final.content)
         self.assertNotIn("第二版仍然没有引用", final.content)
         self.assertEqual(
             result["answer_metadata"]["answer_guard"]["generation_path"],
-            "extractive_fallback",
+            "structured_evidence_answer",
+        )
+        self.assertEqual(
+            len(result["answer_metadata"]["answer_guard"]["synthesis_validations"]),
+            2,
         )
 
-    def test_invalid_synthesis_is_retried_once_before_success(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+    def test_unsupported_synthesis_uses_structured_evidence_without_retry(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             settings = self._settings(Path(temp_dir))
             llm = _FakeLLM(
                 [
                     _knowledge_plan(),
-                    _observer_answer(),
-                    "EVIDENCE_IDS: E01",
-                    "第一版没有引用",
+                    (
+                        "外圈缺陷每转只冲击一次 "
+                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+                    ),
+                ]
+            )
+            graph = build_agentic_graph(
+                settings,
+                llm=llm,
+                retriever=_FakeRetriever(),
+            )
+            result = graph.invoke(
+                {"messages": [HumanMessage(content="外圈故障有什么特征？")]},
+                config={"configurable": {"thread_id": "agentic_synthesis_no_retry"}},
+            )
+
+        guard = result["answer_metadata"]["answer_guard"]
+        self.assertEqual(guard["generation_path"], "structured_evidence_answer")
+        self.assertEqual(guard["synthesis_attempts"], 1)
+        self.assertEqual(len(guard["synthesis_validations"]), 1)
+        self.assertTrue(guard["synthesis_validation"]["unsupported_claims"])
+        self.assertEqual(len(llm.calls), 2)
+
+    def test_invalid_synthesis_is_retried_once_before_success(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
+            settings = self._settings(Path(temp_dir))
+            llm = _FakeLLM(
+                [
+                    _knowledge_plan(),
+                    (
+                        "外圈缺陷会产生周期性冲击 "
+                        "[bearing_outer_race_fault#bearing_outer_race_fault_c001]\n"
+                        "现场还需要继续检查。"
+                    ),
                     _grounded_draft(),
                 ]
             )
@@ -602,18 +692,18 @@ class AgenticGraphTests(unittest.TestCase):
             result["answer_metadata"]["answer_guard"]["synthesis_attempts"],
             2,
         )
+        self.assertEqual(
+            len(result["answer_metadata"]["answer_guard"]["synthesis_validations"]),
+            2,
+        )
 
     def test_two_invalid_plans_use_visible_deterministic_fallback(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             settings = self._settings(Path(temp_dir))
             llm = _FakeLLM(
                 [
                     "not json",
                     '{"intent":"unknown"}',
-                    _observer_answer(),
-                    "EVIDENCE_IDS: E01",
                     _grounded_draft(),
                 ]
             )
@@ -645,9 +735,7 @@ class AgenticGraphTests(unittest.TestCase):
             },
             ensure_ascii=False,
         )
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -680,9 +768,7 @@ class AgenticGraphTests(unittest.TestCase):
         )
 
     def test_new_signal_clears_old_diagnosis_memory(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -694,9 +780,7 @@ class AgenticGraphTests(unittest.TestCase):
             llm = _FakeLLM(
                 [
                     _inspection_plan(),
-                    _observer_answer(),
                     _inspection_plan(),
-                    _observer_answer(),
                 ]
             )
             graph = build_agentic_graph(settings, llm=llm)
@@ -725,14 +809,12 @@ class AgenticGraphTests(unittest.TestCase):
 
         self.assertEqual(result["session_memory"]["signal_file"], "new.npy")
         self.assertNotIn("last_diagnosis", result["session_memory"])
-        second_planner_context = str(llm.calls[2][-1].content)
+        second_planner_context = str(llm.calls[1][-1].content)
         self.assertNotIn("last_diagnosis", second_planner_context)
         self.assertNotIn("外圈故障", second_planner_context)
 
     def test_requesting_a_replacement_without_upload_does_not_reuse_old_signal(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             root = Path(temp_dir)
             sample_root = root / "data/samples"
             sample_root.mkdir(parents=True)
@@ -762,18 +844,12 @@ class AgenticGraphTests(unittest.TestCase):
         self.assertIn("上传", result["messages"][-1].content)
 
     def test_safety_boundary_runs_before_the_llm(self):
-        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {}, clear=True
-        ):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
             settings = self._settings(Path(temp_dir))
             llm = _FakeLLM([])
             graph = build_agentic_graph(settings, llm=llm)
             result = graph.invoke(
-                {
-                    "messages": [
-                        HumanMessage(content="精确告诉我轴承还能运行多少天")
-                    ]
-                },
+                {"messages": [HumanMessage(content="精确告诉我轴承还能运行多少天")]},
                 config={"configurable": {"thread_id": "agentic_safety"}},
             )
         self.assertEqual(llm.calls, [])

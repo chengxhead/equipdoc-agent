@@ -1,18 +1,29 @@
 from __future__ import annotations
 
+import hashlib
 import re
+import tempfile
 import unittest
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
-from scripts.eval_agentic_full import _load_jsonl, _validate_cases
+from equipdoc_agent.agent.knowledge_answer import (
+    build_ranked_evidence_candidates,
+    render_structured_evidence_answer,
+    select_evidence_for_question,
+)
 from equipdoc_agent.agent.planning import fallback_plan
 from equipdoc_agent.agent.safety import assess_high_risk_question
+from equipdoc_agent.config import Settings
+from equipdoc_agent.rag import KnowledgeRetriever
+from scripts.eval_agentic_full import _load_jsonl, _validate_cases
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAL_EVAL = ROOT / "data/eval/agentic_eval.jsonl"
 SMOKE_EVAL = ROOT / "data/eval/agentic_smoke.jsonl"
+FORMAL_EVAL_SHA256 = "7f7613ad09819300dbc6edbb98e9d2383d774a3f0cbfee4c939573392dbb23b8"
 
 
 class AgenticFormalEvalDatasetTests(unittest.TestCase):
@@ -29,6 +40,10 @@ class AgenticFormalEvalDatasetTests(unittest.TestCase):
             [f"formal_{index:03d}" for index in range(1, 57)],
         )
         self.assertEqual(sum(len(case["turns"]) for case in self.cases), 64)
+
+    def test_formal_dataset_content_hash_is_frozen(self):
+        digest = hashlib.sha256(FORMAL_EVAL.read_bytes()).hexdigest()
+        self.assertEqual(digest, FORMAL_EVAL_SHA256)
 
     def test_group_distribution_matches_the_formal_contract(self):
         counts = Counter(case["group"] for case in self.cases)
@@ -51,15 +66,11 @@ class AgenticFormalEvalDatasetTests(unittest.TestCase):
             for case in self.cases
         )
         safety_and_clarification = sum(
-            case["group"] in {"safety_boundary", "clarification"}
-            for case in self.cases
+            case["group"] in {"safety_boundary", "clarification"} for case in self.cases
         )
-        memory_cases = [
-            case for case in self.cases if case["group"] == "diagnosis_and_memory"
-        ]
+        memory_cases = [case for case in self.cases if case["group"] == "diagnosis_and_memory"]
         diagnosis_chains = sum(
-            case["group"] in {"diagnosis", "diagnosis_and_memory"}
-            for case in self.cases
+            case["group"] in {"diagnosis", "diagnosis_and_memory"} for case in self.cases
         )
         self.assertEqual(single_turn_tool_cases, 30)
         self.assertEqual(safety_and_clarification, 18)
@@ -86,14 +97,8 @@ class AgenticFormalEvalDatasetTests(unittest.TestCase):
         self.assertEqual(sum(bool(turn["use_signal"]) for turn in turns), 20)
 
     def test_formal_questions_do_not_copy_smoke_questions(self):
-        smoke_questions = {
-            turn["question"]
-            for case in self.smoke_cases
-            for turn in case["turns"]
-        }
-        formal_questions = [
-            turn["question"] for case in self.cases for turn in case["turns"]
-        ]
+        smoke_questions = {turn["question"] for case in self.smoke_cases for turn in case["turns"]}
+        formal_questions = [turn["question"] for case in self.cases for turn in case["turns"]]
         self.assertEqual(len(formal_questions), len(set(formal_questions)))
         self.assertTrue(smoke_questions.isdisjoint(formal_questions))
 
@@ -122,6 +127,56 @@ class AgenticFormalEvalDatasetTests(unittest.TestCase):
                         )
                     )
         self.assertEqual(mismatches, [])
+
+    def test_lexical_retrieval_covers_required_slots_for_all_citation_turns(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = replace(
+                Settings.from_env(ROOT),
+                rag_db_dir=Path(temp_dir) / "no-vector-index",
+            )
+            retriever = KnowledgeRetriever(settings)
+            failures = []
+            for case in self.cases:
+                for turn_index, turn in enumerate(case["turns"], start=1):
+                    if not turn["require_citation"]:
+                        continue
+                    hits = retriever.search(turn["question"], top_k=5)
+                    candidates = build_ranked_evidence_candidates(turn["question"], hits)
+                    selection = select_evidence_for_question(turn["question"], candidates)
+                    if not selection["valid"]:
+                        failures.append((case["id"], turn_index, selection["missing_slots"]))
+        self.assertEqual(failures, [])
+
+    def test_single_turn_structured_answers_cover_frozen_keywords(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = replace(
+                Settings.from_env(ROOT),
+                rag_db_dir=Path(temp_dir) / "no-vector-index",
+            )
+            retriever = KnowledgeRetriever(settings)
+            failures = []
+            for case in self.cases:
+                for turn_index, turn in enumerate(case["turns"], start=1):
+                    if not turn["require_citation"] or turn.get("use_signal"):
+                        continue
+                    if turn_index > 1:
+                        # Later turns can depend on the real diagnosis stored in
+                        # session memory, which this lexical-only test does not run.
+                        continue
+                    required_keywords = turn.get("required_keywords", [])
+                    hits = retriever.search(turn["question"], top_k=5)
+                    candidates = build_ranked_evidence_candidates(turn["question"], hits)
+                    selection = select_evidence_for_question(turn["question"], candidates)
+                    answer = render_structured_evidence_answer(
+                        turn["question"],
+                        candidates,
+                        selection["selected_ids"],
+                        selection["slot_assignments"],
+                    )
+                    missing = [keyword for keyword in required_keywords if keyword not in answer]
+                    if missing:
+                        failures.append((case["id"], turn_index, missing))
+        self.assertEqual(failures, [])
 
     def test_dataset_contains_no_private_paths_or_credentials(self):
         raw = FORMAL_EVAL.read_text(encoding="utf-8")

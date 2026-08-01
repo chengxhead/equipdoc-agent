@@ -6,6 +6,7 @@ from equipdoc_agent.agent.knowledge_answer import (
     build_grounded_synthesis_messages,
     build_grounded_synthesis_retry_messages,
     render_tool_observation_section,
+    should_retry_grounded_synthesis,
     validate_grounded_draft,
 )
 
@@ -39,25 +40,18 @@ class GroundedGenerationTests(unittest.TestCase):
         self.assertEqual(validation["claim_citation_coverage"], 1.0)
 
     def test_unknown_or_trailing_paragraph_citation_is_invalid(self):
-        unknown = (
-            "外圈缺陷会产生冲击 "
-            "[unknown#unknown_c001]"
-        )
+        unknown = "外圈缺陷会产生冲击 [unknown#unknown_c001]"
         self.assertFalse(validate_grounded_draft(unknown, self.evidence)["valid"])
 
         paragraph = (
-            "外圈缺陷会产生周期性冲击。"
-            "还需要检查润滑状态 [bearing_review#bearing_review_c001]"
+            "外圈缺陷会产生周期性冲击。还需要检查润滑状态 [bearing_review#bearing_review_c001]"
         )
         validation = validate_grounded_draft(paragraph, self.evidence)
         self.assertFalse(validation["valid"])
         self.assertEqual(len(validation["uncited_claims"]), 1)
 
     def test_unknown_acronym_and_number_are_rejected(self):
-        draft = (
-            "应关注 BPFI 和 99Hz "
-            "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
-        )
+        draft = "应关注 BPFI 和 99Hz [bearing_outer_race_fault#bearing_outer_race_fault_c001]"
         validation = validate_grounded_draft(draft, self.evidence)
         terms = {item["term"] for item in validation["unsupported_terms"]}
         self.assertIn("BPFI", terms)
@@ -65,13 +59,29 @@ class GroundedGenerationTests(unittest.TestCase):
         self.assertFalse(validation["valid"])
 
     def test_forbidden_control_claim_is_rejected(self):
-        draft = (
-            "系统已执行停机并检查润滑状态 "
-            "[bearing_review#bearing_review_c001]"
-        )
+        draft = "系统已执行停机并检查润滑状态 [bearing_review#bearing_review_c001]"
         validation = validate_grounded_draft(draft, self.evidence)
         self.assertIn("已执行停机", validation["forbidden_terms"])
         self.assertFalse(validation["valid"])
+
+    def test_superficial_token_overlap_cannot_support_a_new_causal_claim(self):
+        draft = (
+            "轴承外圈缺陷会导致润滑油变成蓝色 "
+            "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+        )
+        validation = validate_grounded_draft(draft, self.evidence)
+        self.assertFalse(validation["valid"])
+        self.assertEqual(len(validation["unsupported_claims"]), 1)
+
+    def test_question_slot_coverage_is_checked(self):
+        draft = "外圈缺陷会产生周期性冲击 [bearing_outer_race_fault#bearing_outer_race_fault_c001]"
+        validation = validate_grounded_draft(
+            draft,
+            self.evidence,
+            question="为什么会产生冲击，现场应复核什么？",
+        )
+        self.assertFalse(validation["valid"])
+        self.assertEqual(validation["missing_slots"], ["field_review"])
 
     def test_synthesis_prompts_include_only_selected_evidence_and_redact_paths(self):
         messages = build_grounded_synthesis_messages(
@@ -102,6 +112,24 @@ class GroundedGenerationTests(unittest.TestCase):
             validation,
         )
         self.assertIn("uncited_claims", str(retry[-1].content))
+
+    def test_retry_policy_skips_semantically_unsupported_drafts(self):
+        unsupported = validate_grounded_draft(
+            "外圈故障每转只冲击一次 [bearing_outer_race_fault#bearing_outer_race_fault_c001]",
+            self.evidence,
+        )
+        self.assertFalse(should_retry_grounded_synthesis(unsupported))
+
+        zero_citation = validate_grounded_draft("第一版没有引用", self.evidence)
+        self.assertFalse(should_retry_grounded_synthesis(zero_citation))
+
+        partially_cited = validate_grounded_draft(
+            "轴承外圈局部缺陷会产生周期性冲击 "
+            "[bearing_outer_race_fault#bearing_outer_race_fault_c001]\n"
+            "现场还需要继续检查。",
+            self.evidence,
+        )
+        self.assertTrue(should_retry_grounded_synthesis(partially_cited))
 
     def test_tool_observation_is_rendered_deterministically(self):
         rendered = render_tool_observation_section(

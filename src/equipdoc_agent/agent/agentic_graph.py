@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
@@ -17,17 +18,15 @@ from ..config import Settings
 from ..rag import KnowledgeRetriever
 from .agentic_tools import execute_agentic_tool
 from .knowledge_answer import (
-    build_citation_retry_messages,
-    build_full_rag_messages,
     build_grounded_synthesis_messages,
     build_grounded_synthesis_retry_messages,
     build_ranked_evidence_candidates,
-    extract_evidence_selection,
-    render_extractive_fallback,
-    render_selected_evidence,
+    render_safe_fallback,
+    render_structured_evidence_answer,
     render_tool_observation_section,
+    select_evidence_for_question,
+    should_retry_grounded_synthesis,
     validate_answer_citations,
-    validate_evidence_selection,
     validate_grounded_draft,
 )
 from .planning import (
@@ -91,11 +90,15 @@ def _new_turn_memory(state: AgenticState, user_text: str) -> dict[str, Any]:
             "last_evidence",
             "pending_clarification",
             "completed_tools",
+            "attempted_tools",
+            "failed_tools",
         ):
             memory.pop(key, None)
     if signal_file:
         memory["signal_file"] = signal_file
     memory["completed_tools"] = []
+    memory["attempted_tools"] = []
+    memory["failed_tools"] = []
     return memory
 
 
@@ -199,6 +202,17 @@ def _merge_memory_after_tool(
 ) -> dict[str, Any]:
     updated = deepcopy(memory)
     tool_name = str(observation.get("_tool_name", ""))
+    status = str(observation.get("status", ""))
+    attempted = list(updated.get("attempted_tools") or [])
+    if tool_name and tool_name not in attempted:
+        attempted.append(tool_name)
+    updated["attempted_tools"] = attempted
+    if status in {"error", "skipped"}:
+        failed = list(updated.get("failed_tools") or [])
+        if tool_name and tool_name not in failed:
+            failed.append(tool_name)
+        updated["failed_tools"] = failed
+        return updated
     completed = list(updated.get("completed_tools") or [])
     if tool_name and tool_name not in completed:
         completed.append(tool_name)
@@ -227,14 +241,36 @@ def _merge_memory_after_tool(
 
 def _collect_search_hits(observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     unique: dict[str, dict[str, Any]] = {}
-    for observation in observations:
+    for round_index, observation in enumerate(observations, start=1):
         if observation.get("_tool_name") != "search_maintenance_knowledge":
             continue
         for hit in observation.get("hits") or []:
             chunk_id = str(hit.get("chunk_id", ""))
             if chunk_id:
-                unique.setdefault(chunk_id, hit)
-    return list(unique.values())[:5]
+                enriched = {
+                    **hit,
+                    "retrieval_rounds": [round_index],
+                    "focused_match": bool(hit.get("focused_match")) or round_index > 1,
+                }
+                if chunk_id not in unique:
+                    unique[chunk_id] = enriched
+                    continue
+                existing = unique[chunk_id]
+                existing["retrieval_rounds"] = sorted(
+                    set(existing.get("retrieval_rounds") or []).union({round_index})
+                )
+                existing["focused_match"] = bool(existing.get("focused_match")) or bool(
+                    enriched.get("focused_match")
+                )
+                for score_key in ("rrf_score", "lexical_score", "dense_score"):
+                    values = [
+                        value
+                        for value in (existing.get(score_key), enriched.get(score_key))
+                        if isinstance(value, (int, float)) and not isinstance(value, bool)
+                    ]
+                    if values:
+                        existing[score_key] = max(values)
+    return list(unique.values())
 
 
 def _has_usable_tool_observation(observations: list[dict[str, Any]]) -> bool:
@@ -310,9 +346,7 @@ def build_agentic_graph(
     def planner_node(state: AgenticState) -> dict[str, Any]:
         user_text = _last_human_text(state.get("messages", []))
         signal_path = state.get("signal_path") or ""
-        previous_signal_file = str(
-            (state.get("session_memory") or {}).get("signal_file", "")
-        )
+        previous_signal_file = str((state.get("session_memory") or {}).get("signal_file", ""))
         memory = _new_turn_memory(state, user_text)
         replacement_requested = any(
             term in user_text for term in ("换一个文件", "更换文件", "换份信号")
@@ -329,6 +363,8 @@ def build_agentic_graph(
                 "last_search_query",
                 "last_evidence",
                 "completed_tools",
+                "attempted_tools",
+                "failed_tools",
             ):
                 memory.pop(key, None)
         messages = build_intent_plan_messages(
@@ -337,7 +373,15 @@ def build_agentic_graph(
             has_signal=bool(signal_path),
             max_steps=settings.agent_max_steps,
         )
+        llm_calls: list[dict[str, Any]] = []
+        call_started = time.perf_counter()
         first_response = model.invoke(messages)
+        llm_calls.append(
+            {
+                "stage": "planning_first_pass",
+                "latency_seconds": time.perf_counter() - call_started,
+            }
+        )
         attempts = 1
         errors: list[str] = []
         try:
@@ -358,7 +402,14 @@ def build_agentic_graph(
                 has_signal=bool(signal_path),
                 max_steps=settings.agent_max_steps,
             )
+            call_started = time.perf_counter()
             second_response = model.invoke(retry_messages)
+            llm_calls.append(
+                {
+                    "stage": "planning_retry",
+                    "latency_seconds": time.perf_counter() - call_started,
+                }
+            )
             attempts = 2
             try:
                 plan = parse_and_validate_plan(
@@ -388,6 +439,7 @@ def build_agentic_graph(
                 "generation_path": generation_path,
                 "attempts": attempts,
                 "validation_errors": errors,
+                "llm_calls": llm_calls,
             },
             "observation_metadata": {},
             "answer_metadata": {},
@@ -428,13 +480,8 @@ def build_agentic_graph(
         decision = interrupt(
             {
                 "type": "tool_review",
-                "requested_tools": [
-                    _review_call_payload(call, state.get("signal_path"))
-                ],
-                "notice": (
-                    "Approve runs the sandboxed diagnostic tool; "
-                    "Reject cancels the call."
-                ),
+                "requested_tools": [_review_call_payload(call, state.get("signal_path"))],
+                "notice": ("Approve runs the sandboxed diagnostic tool; Reject cancels the call."),
             }
         )
         return {"review_result": str(decision)}
@@ -484,6 +531,42 @@ def build_agentic_graph(
             "pending_tool_call": {},
         }
 
+    def route_after_tool(state: AgenticState):
+        observations = state.get("tool_observations") or []
+        last = observations[-1] if observations else {}
+        if last.get("status") in {"error", "skipped"}:
+            return "observer"
+        if _ready_plan_steps(state):
+            return "prepare_tool"
+        if last.get("_tool_name") == "diagnose_bearing":
+            completed_tools = {str(item.get("_tool_name")) for item in observations}
+            if "search_maintenance_knowledge" not in completed_tools:
+                return "diagnosis_evidence"
+        return "synthesizer"
+
+    def diagnosis_evidence_node(state: AgenticState) -> dict[str, Any]:
+        decision = _fallback_observation_decision(
+            state,
+            {"search_maintenance_knowledge"},
+            reason="诊断工具成功后按故障类别补充可回查知识证据。",
+        )
+        update: dict[str, Any] = {
+            "observation_metadata": {
+                "generation_path": "deterministic_diagnosis_followup",
+                "validation_error": "",
+                "decision": decision,
+                "llm_calls": [],
+            }
+        }
+        if decision.get("action") == "call_tool":
+            update["pending_tool_call"] = {
+                "step_id": f"O{int(state.get('tool_step_count') or 0) + 1}",
+                "tool": decision["tool"],
+                "arguments": decision["arguments"],
+                "source": "deterministic_diagnosis_followup",
+            }
+        return update
+
     def observer_node(state: AgenticState) -> dict[str, Any]:
         remaining_steps = max(
             0,
@@ -500,6 +583,7 @@ def build_agentic_graph(
                 "observation_metadata": {
                     "generation_path": "max_steps_stop",
                     "decision": decision,
+                    "llm_calls": [],
                 }
             }
         messages = build_observation_messages(
@@ -510,7 +594,12 @@ def build_agentic_graph(
             remaining_steps=remaining_steps,
             memory=state.get("session_memory") or {},
         )
+        call_started = time.perf_counter()
         response = model.invoke(messages)
+        llm_call = {
+            "stage": "observation_decision",
+            "latency_seconds": time.perf_counter() - call_started,
+        }
         try:
             decision = parse_observation_decision(
                 _response_text(response),
@@ -537,13 +626,12 @@ def build_agentic_graph(
                 "generation_path": generation_path,
                 "validation_error": validation_error,
                 "decision": decision,
+                "llm_calls": [llm_call],
             }
         }
         if decision["action"] == "call_tool":
             ready = [
-                step
-                for step in _ready_plan_steps(state)
-                if step.get("tool") == decision["tool"]
+                step for step in _ready_plan_steps(state) if step.get("tool") == decision["tool"]
             ]
             step_id = (
                 str(ready[0]["step_id"])
@@ -574,9 +662,7 @@ def build_agentic_graph(
 
     def clarification_node(state: AgenticState) -> dict[str, Any]:
         plan = state.get("current_plan") or {}
-        observation_decision = (
-            (state.get("observation_metadata") or {}).get("decision") or {}
-        )
+        observation_decision = (state.get("observation_metadata") or {}).get("decision") or {}
         question = (
             observation_decision.get("clarification_question")
             or plan.get("clarification_question")
@@ -607,40 +693,19 @@ def build_agentic_graph(
         evidence_section = ""
         if hits:
             candidates = build_ranked_evidence_candidates(user_text, hits)
-            response = model.invoke(build_full_rag_messages(user_text, hits))
-            selected_ids = extract_evidence_selection(_response_text(response))
-            selection_validation = validate_evidence_selection(
-                selected_ids,
-                candidates,
-                question=user_text,
-            )
-            selection_attempts = 1
-            selection_path = "first_pass"
-            if not selection_validation["valid"]:
-                response = model.invoke(
-                    build_citation_retry_messages(
-                        user_text,
-                        hits,
-                        _response_text(response),
-                    )
-                )
-                selected_ids = extract_evidence_selection(_response_text(response))
-                selection_validation = validate_evidence_selection(
-                    selected_ids,
-                    candidates,
-                    question=user_text,
-                )
-                selection_attempts = 2
-                selection_path = "retry"
+            selection_validation = select_evidence_for_question(user_text, candidates)
+            selected_ids = list(selection_validation["selected_ids"])
+            selection_attempts = 0
+            selection_path = str(selection_validation["selection_path"])
+            synthesis_calls: list[dict[str, Any]] = []
             if selection_validation["valid"]:
-                candidate_lookup = {
-                    item["evidence_id"]: item for item in candidates
-                }
+                candidate_lookup = {item["evidence_id"]: item for item in candidates}
                 selected_evidence = [
                     candidate_lookup[evidence_id]
                     for evidence_id in selected_ids
                     if evidence_id in candidate_lookup
                 ]
+                call_started = time.perf_counter()
                 draft_response = model.invoke(
                     build_grounded_synthesis_messages(
                         user_text,
@@ -648,14 +713,23 @@ def build_agentic_graph(
                         observations,
                     )
                 )
+                synthesis_calls.append(
+                    {
+                        "stage": "grounded_synthesis_first_pass",
+                        "latency_seconds": time.perf_counter() - call_started,
+                    }
+                )
                 draft = _response_text(draft_response)
                 draft_validation = validate_grounded_draft(
                     draft,
                     selected_evidence,
+                    question=user_text,
                 )
+                synthesis_validations = [draft_validation]
                 synthesis_attempts = 1
                 generation_path = "grounded_synthesis"
-                if not draft_validation["valid"]:
+                if should_retry_grounded_synthesis(draft_validation):
+                    call_started = time.perf_counter()
                     draft_response = model.invoke(
                         build_grounded_synthesis_retry_messages(
                             user_text,
@@ -665,11 +739,19 @@ def build_agentic_graph(
                             draft_validation,
                         )
                     )
+                    synthesis_calls.append(
+                        {
+                            "stage": "grounded_synthesis_retry",
+                            "latency_seconds": time.perf_counter() - call_started,
+                        }
+                    )
                     draft = _response_text(draft_response)
                     draft_validation = validate_grounded_draft(
                         draft,
                         selected_evidence,
+                        question=user_text,
                     )
+                    synthesis_validations.append(draft_validation)
                     synthesis_attempts = 2
                     generation_path = "grounded_synthesis_retry"
                 if draft_validation["valid"]:
@@ -680,13 +762,13 @@ def build_agentic_graph(
                         "也不能用于推断精确剩余寿命。"
                     )
                 else:
-                    evidence_section = (
-                        "## 回答降级\n\n"
-                        "自然语言回答两次未通过引用与术语校验，"
-                        "系统已隐藏未验证内容并返回可逐字回查的证据原文。\n\n"
-                        f"{render_selected_evidence(candidates, selected_ids)}"
+                    evidence_section = render_structured_evidence_answer(
+                        user_text,
+                        candidates,
+                        selected_ids,
+                        selection_validation.get("slot_assignments", {}),
                     )
-                    generation_path = "extractive_fallback"
+                    generation_path = "structured_evidence_answer"
                 answer_guard = {
                     "generation_path": generation_path,
                     "selection_path": selection_path,
@@ -694,26 +776,31 @@ def build_agentic_graph(
                     "selection_validation": selection_validation,
                     "synthesis_attempts": synthesis_attempts,
                     "synthesis_validation": draft_validation,
+                    "synthesis_validations": synthesis_validations,
+                    "llm_calls": synthesis_calls,
                     "final_citation_validation": (
                         validate_answer_citations(evidence_section, hits)
-                        if generation_path == "extractive_fallback"
+                        if generation_path == "structured_evidence_answer"
                         else {
                             "valid": draft_validation["valid"],
-                            "claim_citation_coverage": draft_validation[
-                                "claim_citation_coverage"
-                            ],
+                            "claim_citation_coverage": draft_validation["claim_citation_coverage"],
                         }
                     ),
                 }
             else:
-                evidence_section = render_extractive_fallback(hits, question=user_text)
-                generation_path = "extractive_fallback"
+                evidence_section = render_safe_fallback(
+                    user_text,
+                    candidates,
+                    selection_validation,
+                )
+                generation_path = "safe_fallback"
                 answer_guard = {
                     "generation_path": generation_path,
                     "selection_path": selection_path,
                     "selection_attempts": selection_attempts,
                     "selection_validation": selection_validation,
                     "synthesis_attempts": 0,
+                    "llm_calls": [],
                     "final_citation_validation": validate_answer_citations(
                         evidence_section,
                         hits,
@@ -725,20 +812,26 @@ def build_agentic_graph(
                 "本轮没有获得可用的工具观察或知识证据，请补充设备类型、"
                 "现场现象或有效技术资料。"
             )
-        content = "\n\n".join(
-            section for section in (tool_section, evidence_section) if section
-        )
+        content = "\n\n".join(section for section in (tool_section, evidence_section) if section)
         planning_metadata = state.get("planning_metadata") or {}
+        observation_metadata = state.get("observation_metadata") or {}
         if planning_metadata.get("generation_path") == "deterministic_fallback":
-            content = (
-                "> 规划降级：模型两次未返回合格计划，本轮使用确定性安全路由。\n\n"
-                f"{content}"
-            )
+            content = f"> 规划降级：模型两次未返回合格计划，本轮使用确定性安全路由。\n\n{content}"
+        llm_calls = [
+            *list(planning_metadata.get("llm_calls") or []),
+            *list(observation_metadata.get("llm_calls") or []),
+            *list(answer_guard.get("llm_calls") or []),
+        ]
         metadata = {
             "planning": planning_metadata,
-            "observation": state.get("observation_metadata") or {},
+            "observation": observation_metadata,
             "answer_guard": answer_guard,
             "tool_step_count": state.get("tool_step_count", 0),
+            "llm_calls": llm_calls,
+            "llm_call_count": len(llm_calls),
+            "llm_latency_seconds": sum(
+                float(item.get("latency_seconds") or 0.0) for item in llm_calls
+            ),
         }
         return {
             "messages": [
@@ -757,6 +850,7 @@ def build_agentic_graph(
     graph.add_node("prepare_tool", prepare_tool_node)
     graph.add_node("review", review_node)
     graph.add_node("tools", tool_node)
+    graph.add_node("diagnosis_evidence", diagnosis_evidence_node)
     graph.add_node("observer", observer_node)
     graph.add_node("clarification", clarification_node)
     graph.add_node("cancel", cancel_node)
@@ -766,7 +860,8 @@ def build_agentic_graph(
     graph.add_conditional_edges("planner", route_after_planner)
     graph.add_conditional_edges("prepare_tool", route_pending_tool)
     graph.add_conditional_edges("review", after_review)
-    graph.add_edge("tools", "observer")
+    graph.add_conditional_edges("tools", route_after_tool)
+    graph.add_edge("diagnosis_evidence", "tools")
     graph.add_conditional_edges("observer", route_after_observer)
     graph.add_edge("safety_response", END)
     graph.add_edge("clarification", END)

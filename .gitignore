@@ -19,6 +19,11 @@ venv/
 .idea/
 .vscode/
 .ipynb_checkpoints/
+~$*.xlsx
+
+# Local handoff notes (contain workstation and AutoDL paths)
+docs/equipdoc-agent-project-handoff.md
+docs/p2-2-interview-demo-quality-handoff.md
 
 # Runtime data
 runtime/
@@ -35,4 +40,3 @@ data/processed/
 # OS
 .DS_Store
 Thumbs.db
-

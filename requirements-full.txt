@@ -1,2 +1,1 @@
--e .[demo,ml,rag]
-
+-e .[demo,ml,rag,serve]

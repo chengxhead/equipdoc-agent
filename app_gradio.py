@@ -20,10 +20,13 @@ from equipdoc_agent.agent import build_graph
 from equipdoc_agent.config import Settings
 from equipdoc_agent.health import collect_health
 from equipdoc_agent.networking import find_available_port
+from equipdoc_agent.privacy import public_exception_message
+from equipdoc_agent.runtime_cleanup import cleanup_stale_uploads
 
 
 SETTINGS = Settings.from_env(ROOT)
 SETTINGS.ensure_runtime_dirs()
+cleanup_stale_uploads(SETTINGS)
 AGENT = build_graph(SETTINGS)
 
 
@@ -52,6 +55,7 @@ def _uploaded_path(uploaded_file) -> Path | None:
 
 
 def _stage_signal(uploaded_file, use_sample: bool) -> Path | None:
+    cleanup_stale_uploads(SETTINGS)
     if use_sample:
         sample = SETTINGS.sample_root / "test_signal.npy"
         if not sample.exists():
@@ -105,7 +109,7 @@ def submit(question, uploaded_file, use_sample, thread_id):
             thread_id,
             f"请求失败：{type(exc).__name__}",
             "",
-            str(exc),
+            public_exception_message(exc, project_root=SETTINGS.project_root),
             gr.update(interactive=False),
             gr.update(interactive=False),
         )
@@ -127,13 +131,13 @@ def resume_review(decision: str, thread_id: str):
         return (
             f"执行失败：{type(exc).__name__}",
             "",
-            str(exc),
+            public_exception_message(exc, project_root=SETTINGS.project_root),
             gr.update(interactive=False),
             gr.update(interactive=False),
         )
 
 
-HEALTH = collect_health(SETTINGS)
+HEALTH = collect_health(SETTINGS, public=True)
 MODE_NOTICE = (
     "⚠️ 当前为 **Demo 模式**：无需7B模型；故障类别是固定案例回放，不能用于真实诊断。"
     if SETTINGS.demo_mode

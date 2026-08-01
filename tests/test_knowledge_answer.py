@@ -8,7 +8,9 @@ from equipdoc_agent.agent.knowledge_answer import (
     extract_evidence_selection,
     render_extractive_fallback,
     render_selected_evidence,
+    render_structured_evidence_answer,
     render_retrieval_context,
+    select_evidence_for_question,
     validate_answer_citations,
     validate_evidence_selection,
 )
@@ -60,7 +62,7 @@ class KnowledgeAnswerTests(unittest.TestCase):
         self.assertFalse(validation["valid"])
         self.assertEqual(validation["unknown_ids"], ["E02"])
 
-    def test_selection_must_include_multiple_high_relevance_candidates(self):
+    def test_selection_requires_slots_but_not_an_exact_top_four_set(self):
         candidates = [
             {
                 "evidence_id": f"E{index:02d}",
@@ -88,16 +90,55 @@ class KnowledgeAnswerTests(unittest.TestCase):
             question="RMS 和峭度分别反映什么？",
         )
         self.assertFalse(validation["valid"])
-        self.assertEqual(validation["minimum_relevance_matches"], 4)
+        self.assertEqual(validation["minimum_relevance_matches"], 0)
         self.assertEqual(validation["relevance_matches"], [])
+        self.assertEqual(validation["missing_slots"], ["signal_feature"])
 
         partial = validate_evidence_selection(
             ["E01", "E02", "E05", "E06"],
             candidates,
             question="RMS 和峭度分别反映什么？",
         )
-        self.assertFalse(partial["valid"])
+        self.assertTrue(partial["valid"])
         self.assertEqual(partial["relevance_matches"], ["E01", "E02"])
+
+    def test_deterministic_selection_covers_question_slots(self):
+        candidates = [
+            {
+                "evidence_id": "E01",
+                "citation": "doc#mechanism",
+                "text": "外圈缺陷会产生周期性冲击。",
+                "focused_match": True,
+            },
+            {
+                "evidence_id": "E02",
+                "citation": "doc#review",
+                "text": "现场应复核安装松动、润滑状态和异常噪声。",
+                "focused_match": False,
+            },
+            {
+                "evidence_id": "E03",
+                "citation": "doc#other",
+                "text": "这是无关的通用描述。",
+                "focused_match": True,
+            },
+        ]
+        selection = select_evidence_for_question(
+            "外圈故障为什么产生冲击，现场应检查什么？",
+            candidates,
+        )
+        self.assertTrue(selection["valid"])
+        self.assertEqual(selection["missing_slots"], [])
+        self.assertIn("E01", selection["selected_ids"])
+        self.assertIn("E02", selection["selected_ids"])
+
+        answer = render_structured_evidence_answer(
+            "外圈故障为什么产生冲击，现场应检查什么？",
+            candidates,
+            selection["selected_ids"],
+        )
+        self.assertIn("机理与原因", answer)
+        self.assertIn("现场复核", answer)
 
     def test_review_ranking_treats_inspection_as_field_review_evidence(self):
         candidates = [
@@ -126,6 +167,119 @@ class KnowledgeAnswerTests(unittest.TestCase):
         )
         self.assertIn("E05", validation["recommended_ids"])
         self.assertNotIn("E06", validation["recommended_ids"])
+
+    def test_focus_specific_evidence_beats_generic_multi_slot_sentences(self):
+        candidates = [
+            {
+                "evidence_id": "E01",
+                "citation": "generic#c001",
+                "text": "工程上需要结合包络谱、工况和传感器进行现场复核。",
+                "focused_match": True,
+            },
+            {
+                "evidence_id": "E02",
+                "citation": "outer#c002",
+                "text": "外圈故障在包络谱中 BPFO 附近峰值更明显。",
+                "focused_match": False,
+            },
+            {
+                "evidence_id": "E03",
+                "citation": "outer#c003",
+                "text": "外圈故障应复核转速、负载和传感器安装状态，再现场检查。",
+                "focused_match": False,
+            },
+            {
+                "evidence_id": "E04",
+                "citation": "inner#c002",
+                "text": "内圈故障应结合转速和历史趋势判断。",
+                "focused_match": True,
+            },
+        ]
+        question = "轴承外圈点蚀时，包络谱有什么表现，现场应怎样复核？"
+        selection = select_evidence_for_question(question, candidates)
+
+        self.assertEqual(selection["slot_assignments"]["signal_feature"], "E02")
+        self.assertEqual(selection["slot_assignments"]["field_review"], "E03")
+
+        answer = render_structured_evidence_answer(
+            question,
+            candidates,
+            selection["selected_ids"],
+            selection["slot_assignments"],
+        )
+        signal_section, review_section = answer.split("### 现场复核", maxsplit=1)
+        self.assertIn("外圈故障在包络谱中 BPFO", signal_section)
+        self.assertNotIn("外圈故障应复核转速", signal_section)
+        self.assertIn("外圈故障应复核转速", review_section)
+
+    def test_causal_connector_is_classified_as_mechanism(self):
+        candidates = [
+            {
+                "evidence_id": "E01",
+                "citation": "inner#c001",
+                "text": "内圈随轴旋转，因此信号常带有转频调制特征。",
+                "focused_match": True,
+            },
+            {
+                "evidence_id": "E02",
+                "citation": "inner#c002",
+                "text": "内圈故障在包络谱中 BPFI 两侧出现转频边带。",
+                "focused_match": True,
+            },
+            {
+                "evidence_id": "E03",
+                "citation": "inner#c003",
+                "text": "内圈故障复核时应检查负载、转速和传感器状态。",
+                "focused_match": True,
+            },
+        ]
+        selection = select_evidence_for_question(
+            "内圈故障为什么有转频边带，复核时看什么？",
+            candidates,
+        )
+        self.assertEqual(selection["slot_assignments"]["mechanism"], "E01")
+        self.assertTrue(selection["valid"])
+
+    def test_one_chunk_can_supply_three_complementary_answer_facts(self):
+        candidates = [
+            {
+                "evidence_id": "E01",
+                "citation": "maintenance#c001",
+                "text": ("模型可以给出置信度，但是否维修需要结合负载、温度、历史趋势和生产风险。"),
+                "focused_match": True,
+            },
+            {
+                "evidence_id": "E02",
+                "citation": "maintenance#c001",
+                "text": "若置信度中等，建议复测多段信号后再决定是否拆检。",
+                "focused_match": True,
+            },
+            {
+                "evidence_id": "E03",
+                "citation": "maintenance#c001",
+                "text": "诊断报告应区分模型结论和维修决策。",
+                "focused_match": True,
+            },
+            {
+                "evidence_id": "E04",
+                "citation": "boundary#c001",
+                "text": "不能仅凭一次结果推断精确剩余寿命。",
+                "focused_match": False,
+            },
+        ]
+        selection = select_evidence_for_question(
+            "置信度为什么不能单独决定是否维修？",
+            candidates,
+        )
+        self.assertIn("E03", selection["selected_ids"])
+
+        answer = render_structured_evidence_answer(
+            "置信度为什么不能单独决定是否维修？",
+            candidates,
+            selection["selected_ids"],
+            selection["slot_assignments"],
+        )
+        self.assertIn("维修决策", answer)
 
     def test_selected_evidence_is_rendered_with_source_citation(self):
         candidates = build_evidence_candidates(self.hits)
@@ -164,10 +318,7 @@ class KnowledgeAnswerTests(unittest.TestCase):
         self.assertEqual(validation["claim_evidence_match_rate"], 1.0)
 
     def test_cited_but_unsupported_paraphrase_is_invalid(self):
-        answer = (
-            "外圈缺陷每转只冲击一次 "
-            "[bearing_outer_race_fault#bearing_outer_race_fault_c001]"
-        )
+        answer = "外圈缺陷每转只冲击一次 [bearing_outer_race_fault#bearing_outer_race_fault_c001]"
         validation = validate_answer_citations(answer, self.hits)
         self.assertFalse(validation["valid"])
         self.assertEqual(validation["claim_citation_coverage"], 1.0)

@@ -5,11 +5,12 @@ import hashlib
 import importlib.metadata
 import json
 import platform
+import re
 import statistics
 import subprocess
 import time
 import urllib.request
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,7 @@ from equipdoc_agent.config import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEW_VALUES = {"none", "approve", "reject"}
+WINDOWS_ABSOLUTE_PATH = re.compile(r"(?i)\b[A-Z]:[\\/]")
 
 
 def _sha256(path: Path) -> str:
@@ -35,9 +37,7 @@ def _sha256(path: Path) -> str:
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -162,9 +162,10 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         grouped[row["group"]].append(row)
-    latencies = [float(row["latency_seconds"]) for row in rows if row.get("success")]
 
     def block(items: list[dict[str, Any]]) -> dict[str, Any]:
+        block_latencies = [float(item["latency_seconds"]) for item in items if item.get("success")]
+        llm_counts = [int(item.get("llm_call_count") or 0) for item in items]
         return {
             "turn_count": len(items),
             "success_rate": _rate(items, "success"),
@@ -179,23 +180,26 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "grounded_answer_guard_rate": _rate(items, "answer_guard_ok"),
             "memory_retention_rate": _rate(items, "memory_ok"),
             "required_keyword_case_pass_rate": _rate(items, "keywords_ok"),
+            "latency_mean_seconds": (statistics.mean(block_latencies) if block_latencies else None),
+            "latency_p50_seconds": _percentile(block_latencies, 50),
+            "latency_p95_seconds": _percentile(block_latencies, 95),
+            "average_llm_call_count": statistics.mean(llm_counts) if llm_counts else None,
+            "planning_path_counts": dict(
+                Counter(str(item.get("planning_path") or "none") for item in items)
+            ),
+            "generation_path_counts": dict(
+                Counter(str(item.get("generation_path") or "none") for item in items)
+            ),
         }
 
     return {
         "overall": {
             **block(rows),
-            "latency_mean_seconds": statistics.mean(latencies) if latencies else None,
-            "latency_p50_seconds": _percentile(latencies, 50),
-            "latency_p95_seconds": _percentile(latencies, 95),
             "average_tool_steps": (
-                statistics.mean(row["tool_step_count"] for row in rows)
-                if rows
-                else None
+                statistics.mean(row["tool_step_count"] for row in rows) if rows else None
             ),
         },
-        "by_group": {
-            group: block(items) for group, items in sorted(grouped.items())
-        },
+        "by_group": {group: block(items) for group, items in sorted(grouped.items())},
     }
 
 
@@ -246,9 +250,7 @@ def main() -> None:
 
     model_ids = _service_models(args.base_url, args.api_key, args.timeout)
     if args.model not in model_ids:
-        raise SystemExit(
-            f"Configured model {args.model!r} is not listed by service: {model_ids}"
-        )
+        raise SystemExit(f"Configured model {args.model!r} is not listed by service: {model_ids}")
     settings = replace(
         base_settings,
         demo_mode=False,
@@ -263,10 +265,7 @@ def main() -> None:
     if not sample_path.exists():
         raise SystemExit(f"Sample signal is missing: {sample_path}")
     graph = build_graph(settings)
-    corpus = {
-        item["chunk_id"]: item
-        for item in _load_jsonl(settings.rag_chunks_path)
-    }
+    corpus = {item["chunk_id"]: item for item in _load_jsonl(settings.rag_chunks_path)}
 
     rows: list[dict[str, Any]] = []
     for case_index, case in enumerate(cases, start=1):
@@ -277,9 +276,7 @@ def main() -> None:
                 f"[{case_index}/{len(cases)} turn {turn_index}] {case['id']}",
                 flush=True,
             )
-            payload: dict[str, Any] = {
-                "messages": [HumanMessage(content=turn["question"])]
-            }
+            payload: dict[str, Any] = {"messages": [HumanMessage(content=turn["question"])]}
             if turn.get("use_signal"):
                 payload["signal_path"] = str(sample_path)
             started = time.perf_counter()
@@ -297,25 +294,15 @@ def main() -> None:
                 answer = str(getattr(message, "content", ""))
                 observations = list(result.get("tool_observations") or [])
                 actual_tools = [
-                    str(item.get("_tool_name"))
-                    for item in observations
-                    if item.get("_tool_name")
+                    str(item.get("_tool_name")) for item in observations if item.get("_tool_name")
                 ]
                 plan = result.get("current_plan") or {}
                 actual_intent = str(
                     plan.get("intent")
-                    or (
-                        "safety_boundary"
-                        if result.get("safety_decision")
-                        else "unknown"
-                    )
+                    or ("safety_boundary" if result.get("safety_decision") else "unknown")
                 )
                 expected_intent = turn.get("expected_intent")
-                intent_ok = (
-                    None
-                    if expected_intent is None
-                    else actual_intent == expected_intent
-                )
+                intent_ok = None if expected_intent is None else actual_intent == expected_intent
                 expected_tools = set(turn.get("expected_tools", []))
                 allowed_tools = set(turn.get("allowed_tools", []))
                 expected_tools_ok = expected_tools.issubset(actual_tools)
@@ -325,37 +312,45 @@ def main() -> None:
                     if review_expected in {"approve", "reject"}
                     else not bool(review_payload)
                 )
-                serialized_review = json.dumps(
-                    review_payload or {},
+                serialized_public_output = json.dumps(
+                    {
+                        "review_payload": review_payload or {},
+                        "answer": answer,
+                        "tool_observations": observations,
+                    },
                     ensure_ascii=False,
                 )
                 privacy_ok = (
-                    "signal_path" not in serialized_review
-                    and str(settings.project_root) not in serialized_review
+                    "signal_path" not in serialized_public_output
+                    and str(settings.project_root) not in serialized_public_output
+                    and "/root/" not in serialized_public_output
+                    and not WINDOWS_ABSOLUTE_PATH.search(serialized_public_output)
                 )
                 clarification_ok = (
-                    "需要补充信息" in answer
-                    if expected_intent == "clarification"
-                    else None
+                    "需要补充信息" in answer if expected_intent == "clarification" else None
                 )
                 citations = extract_citations(answer)
                 citation_checks = [
-                    chunk_id in corpus
-                    and corpus[chunk_id].get("doc_id") == doc_id
+                    chunk_id in corpus and corpus[chunk_id].get("doc_id") == doc_id
                     for doc_id, chunk_id in citations
                 ]
                 require_citation = bool(turn.get("require_citation"))
                 citations_ok = (
-                    bool(citations) and all(citation_checks)
-                    if require_citation
-                    else None
+                    bool(citations) and all(citation_checks) if require_citation else None
                 )
                 response_metadata = getattr(message, "response_metadata", None) or {}
                 agentic_metadata = response_metadata.get("equipdoc_agentic") or {}
                 answer_guard = agentic_metadata.get("answer_guard") or {}
                 final_guard = answer_guard.get("final_citation_validation") or {}
+                generation_path = answer_guard.get("generation_path")
                 answer_guard_ok = (
                     bool(final_guard.get("valid"))
+                    and generation_path
+                    in {
+                        "grounded_synthesis",
+                        "grounded_synthesis_retry",
+                        "structured_evidence_answer",
+                    }
                     if require_citation
                     else None
                 )
@@ -363,9 +358,7 @@ def main() -> None:
                 required_memory = list(turn.get("memory_has", []))
                 memory_ok = (
                     all(
-                        key in memory
-                        and memory[key] is not None
-                        and memory[key] != ""
+                        key in memory and memory[key] is not None and memory[key] != ""
                         for key in required_memory
                     )
                     if required_memory
@@ -392,11 +385,17 @@ def main() -> None:
                 success = bool(answer.strip())
                 passed = success and all(applicable_checks)
                 error = None
-                generation_path = answer_guard.get("generation_path")
-                planning_path = (
-                    result.get("planning_metadata") or {}
-                ).get("generation_path")
+                selection_path = answer_guard.get("selection_path")
+                selection_validation = answer_guard.get("selection_validation") or {}
+                synthesis_validation = answer_guard.get("synthesis_validation") or {}
+                synthesis_validations = list(answer_guard.get("synthesis_validations") or [])
+                planning_metadata = result.get("planning_metadata") or {}
+                planning_path = planning_metadata.get("generation_path")
+                planning_validation_errors = list(planning_metadata.get("validation_errors") or [])
                 tool_step_count = int(result.get("tool_step_count") or 0)
+                llm_calls = list(agentic_metadata.get("llm_calls") or [])
+                llm_call_count = int(agentic_metadata.get("llm_call_count") or len(llm_calls))
+                llm_latency_seconds = float(agentic_metadata.get("llm_latency_seconds") or 0.0)
             except Exception as exc:
                 latency = time.perf_counter() - started
                 answer = ""
@@ -418,8 +417,16 @@ def main() -> None:
                 error = f"{type(exc).__name__}: {exc}"
                 review_payload = None
                 generation_path = "error"
+                selection_path = "error"
+                selection_validation = {}
+                synthesis_validation = {}
+                synthesis_validations = []
                 planning_path = "error"
+                planning_validation_errors = []
                 tool_step_count = 0
+                llm_calls = []
+                llm_call_count = 0
+                llm_latency_seconds = 0.0
 
             rows.append(
                 {
@@ -438,16 +445,23 @@ def main() -> None:
                     "review_ok": review_ok,
                     "privacy_ok": privacy_ok,
                     "clarification_ok": clarification_ok,
-                    "citations": [
-                        f"{doc_id}#{chunk_id}" for doc_id, chunk_id in citations
-                    ],
+                    "citations": [f"{doc_id}#{chunk_id}" for doc_id, chunk_id in citations],
                     "citations_ok": citations_ok,
                     "answer_guard_ok": answer_guard_ok,
                     "memory_ok": memory_ok,
                     "keywords_ok": keywords_ok,
                     "planning_path": planning_path,
                     "generation_path": generation_path,
+                    "selection_path": selection_path,
+                    "planning_validation_errors": planning_validation_errors,
+                    "selection_validation": selection_validation,
+                    "synthesis_validations": synthesis_validations,
+                    "selection_missing_slots": selection_validation.get("missing_slots", []),
+                    "synthesis_missing_slots": synthesis_validation.get("missing_slots", []),
                     "tool_step_count": tool_step_count,
+                    "llm_calls": llm_calls,
+                    "llm_call_count": llm_call_count,
+                    "llm_latency_seconds": llm_latency_seconds,
                     "latency_seconds": latency,
                     "review_payload": review_payload,
                     "answer": answer,
@@ -497,9 +511,7 @@ def main() -> None:
     if args.min_case_pass_rate is not None and (
         pass_rate is None or pass_rate < args.min_case_pass_rate
     ):
-        raise SystemExit(
-            f"case_pass_rate {pass_rate} is below required {args.min_case_pass_rate}"
-        )
+        raise SystemExit(f"case_pass_rate {pass_rate} is below required {args.min_case_pass_rate}")
 
 
 if __name__ == "__main__":

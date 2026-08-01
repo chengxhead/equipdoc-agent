@@ -20,7 +20,12 @@ def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
         return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean value, got {raw!r}")
 
 
 def _resolve(project_root: Path, value: str) -> Path:
@@ -43,6 +48,7 @@ class Settings:
     sample_root: Path
     upload_root: Path
     max_upload_bytes: int
+    upload_ttl_seconds: int
     rag_enabled: bool
     rag_chunks_path: Path
     rag_db_dir: Path
@@ -58,6 +64,7 @@ class Settings:
         root = (project_root or PROJECT_ROOT).resolve()
         _load_dotenv(root)
         max_upload_mb = max(1, int(os.getenv("EQUIPDOC_MAX_UPLOAD_MB", "8")))
+        upload_ttl_hours = max(1.0, float(os.getenv("EQUIPDOC_UPLOAD_TTL_HOURS", "24")))
         return cls(
             project_root=root,
             demo_mode=_env_bool("EQUIPDOC_DEMO_MODE", True),
@@ -72,6 +79,7 @@ class Settings:
             sample_root=_resolve(root, os.getenv("EQUIPDOC_SAMPLE_ROOT", "data/samples")),
             upload_root=_resolve(root, os.getenv("EQUIPDOC_UPLOAD_ROOT", "runtime/uploads")),
             max_upload_bytes=max_upload_mb * 1024 * 1024,
+            upload_ttl_seconds=int(upload_ttl_hours * 3600),
             rag_enabled=_env_bool("EQUIPDOC_RAG_ENABLED", True),
             rag_chunks_path=_resolve(root, os.getenv("EQUIPDOC_RAG_CHUNKS_PATH", "data/knowledge_chunks.jsonl")),
             rag_db_dir=_resolve(root, os.getenv("EQUIPDOC_RAG_DB_DIR", "vector_db/chroma_equipdoc")),

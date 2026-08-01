@@ -40,12 +40,22 @@ def validate_signal_path(signal_path: str | Path, settings: Settings) -> Path:
 
 
 def _load_signal(path: Path) -> np.ndarray:
-    signal = np.load(path, allow_pickle=False)
-    if not np.issubdtype(signal.dtype, np.number):
-        raise SignalValidationError("Signal array must contain numeric values.")
-    signal = np.asarray(signal, dtype=np.float32).reshape(-1)
-    if signal.size == 0:
+    try:
+        signal_view = np.load(path, allow_pickle=False, mmap_mode="r")
+    except (OSError, ValueError) as exc:
+        raise SignalValidationError(
+            "Signal file is not a valid non-pickled .npy array."
+        ) from exc
+    if not (
+        np.issubdtype(signal_view.dtype, np.integer)
+        or np.issubdtype(signal_view.dtype, np.floating)
+    ):
+        raise SignalValidationError("Signal array must contain real numeric values.")
+    if signal_view.ndim != 1:
+        raise SignalValidationError("Signal array must be one-dimensional.")
+    if signal_view.size == 0:
         raise SignalValidationError("Signal array is empty.")
+    signal = np.array(signal_view, dtype=np.float32, copy=True)
     if not np.isfinite(signal).all():
         raise SignalValidationError("Signal array contains NaN or infinity.")
     return signal
@@ -89,13 +99,13 @@ def _load_model(model_path: str, norm_path: str):
     from ..models.bearing_cnn import LightCNN
 
     model = LightCNN()
-    try:
-        state = torch.load(model_path, map_location="cpu", weights_only=True)
-    except TypeError:
-        state = torch.load(model_path, map_location="cpu")
+    state = torch.load(model_path, map_location="cpu", weights_only=True)
     model.load_state_dict(state)
     model.eval()
-    mean, std = np.load(norm_path, allow_pickle=False)
+    norm = np.asarray(np.load(norm_path, allow_pickle=False), dtype=np.float64).reshape(-1)
+    if norm.size != 2 or not np.isfinite(norm).all() or float(norm[1]) <= 0:
+        raise RuntimeError("Normalization artifact must contain finite [mean, positive_std].")
+    mean, std = norm
     return model, float(mean), float(std)
 
 

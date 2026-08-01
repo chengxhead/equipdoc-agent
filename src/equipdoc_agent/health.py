@@ -16,26 +16,35 @@ class HealthCheck:
     detail: str
 
 
-def _path_check(name: str, path: Path, required: bool) -> HealthCheck:
-    return HealthCheck(name=name, ok=path.exists(), required=required, detail=str(path))
+def _path_check(name: str, path: Path, required: bool, *, public: bool) -> HealthCheck:
+    detail = path.name if public else str(path)
+    return HealthCheck(name=name, ok=path.exists(), required=required, detail=detail)
 
 
-def collect_health(settings: Settings) -> dict:
+def collect_health(settings: Settings, *, public: bool = False) -> dict:
     settings.ensure_runtime_dirs()
     checks = [
-        _path_check("sample_signal", settings.sample_root / "test_signal.npy", True),
-        _path_check("upload_root", settings.upload_root, True),
-        _path_check("rag_chunks", settings.rag_chunks_path, settings.rag_enabled),
-        _path_check("bearing_model", settings.bearing_model_path, not settings.demo_mode),
-        _path_check("bearing_norm", settings.bearing_norm_path, not settings.demo_mode),
-        _path_check("rag_vector_db", settings.rag_db_dir, False),
+        _path_check("sample_signal", settings.sample_root / "test_signal.npy", True, public=public),
+        _path_check("upload_root", settings.upload_root, True, public=public),
+        _path_check("rag_chunks", settings.rag_chunks_path, settings.rag_enabled, public=public),
+        _path_check(
+            "bearing_model", settings.bearing_model_path, not settings.demo_mode, public=public
+        ),
+        _path_check(
+            "bearing_norm", settings.bearing_norm_path, not settings.demo_mode, public=public
+        ),
+        _path_check("rag_vector_db", settings.rag_db_dir, False, public=public),
     ]
     checks.append(
         HealthCheck(
             name="llm_configuration",
             ok=bool(settings.llm_base_url and settings.llm_model),
             required=not settings.demo_mode,
-            detail=f"{settings.llm_model} @ {settings.llm_base_url}",
+            detail=(
+                f"{settings.llm_model} configured"
+                if public
+                else f"{settings.llm_model} @ {settings.llm_base_url}"
+            ),
         )
     )
     ready = all(item.ok for item in checks if item.required)

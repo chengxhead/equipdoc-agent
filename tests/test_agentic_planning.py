@@ -52,6 +52,28 @@ class AgenticPlanningTests(unittest.TestCase):
         self.assertEqual(plan["plan"][0]["arguments"]["top_k"], 5)
         self.assertEqual(plan["validation"]["source"], "model")
 
+    def test_remembered_signal_cannot_turn_a_knowledge_question_into_diagnosis(self):
+        diagnosis_plan = _plan_text(
+            intent="diagnosis",
+            plan=[
+                {
+                    "step_id": "S1",
+                    "tool": "diagnose_bearing",
+                    "arguments": {},
+                    "depends_on": [],
+                }
+            ],
+        )
+        with self.assertRaisesRegex(
+            PlanningValidationError,
+            "remembered signal",
+        ):
+            parse_and_validate_plan(
+                diagnosis_plan,
+                has_signal=True,
+                user_text="外圈故障为什么会产生周期性冲击？",
+            )
+
     def test_knowledge_search_is_anchored_and_narrow_filters_are_removed(self):
         question = "上一轮的置信度为什么不能单独决定是否维修？"
         plan = parse_and_validate_plan(

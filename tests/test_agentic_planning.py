@@ -52,6 +52,34 @@ class AgenticPlanningTests(unittest.TestCase):
         self.assertEqual(plan["plan"][0]["arguments"]["top_k"], 5)
         self.assertEqual(plan["validation"]["source"], "model")
 
+    def test_knowledge_search_is_anchored_and_narrow_filters_are_removed(self):
+        question = "上一轮的置信度为什么不能单独决定是否维修？"
+        plan = parse_and_validate_plan(
+            _plan_text(),
+            max_steps=3,
+            user_text=question,
+        )
+        arguments = plan["plan"][0]["arguments"]
+        self.assertTrue(arguments["query"].startswith(question))
+        self.assertIn("维修决策", arguments["query"])
+        self.assertNotIn("轴承外圈故障", arguments["query"])
+        self.assertEqual(arguments["top_k"], 5)
+        self.assertNotIn("equipment", arguments)
+        self.assertNotIn("fault_type", arguments)
+        self.assertTrue(plan["validation"]["knowledge_search_anchored"])
+
+    def test_referential_fault_question_keeps_only_specific_model_context(self):
+        question = "上一轮故障类别通常有哪些频谱特征？"
+        plan = parse_and_validate_plan(
+            _plan_text(),
+            max_steps=3,
+            user_text=question,
+        )
+        query = plan["plan"][0]["arguments"]["query"]
+        self.assertTrue(query.startswith(question))
+        self.assertIn("外圈故障", query)
+        self.assertNotIn("周期性冲击", query)
+
     def test_diagnosis_without_signal_becomes_clarification(self):
         text = _plan_text(
             intent="diagnosis",

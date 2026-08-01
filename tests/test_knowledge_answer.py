@@ -88,8 +88,16 @@ class KnowledgeAnswerTests(unittest.TestCase):
             question="RMS 和峭度分别反映什么？",
         )
         self.assertFalse(validation["valid"])
-        self.assertEqual(validation["minimum_relevance_matches"], 2)
+        self.assertEqual(validation["minimum_relevance_matches"], 4)
         self.assertEqual(validation["relevance_matches"], [])
+
+        partial = validate_evidence_selection(
+            ["E01", "E02", "E05", "E06"],
+            candidates,
+            question="RMS 和峭度分别反映什么？",
+        )
+        self.assertFalse(partial["valid"])
+        self.assertEqual(partial["relevance_matches"], ["E01", "E02"])
 
     def test_selected_evidence_is_rendered_with_source_citation(self):
         candidates = build_evidence_candidates(self.hits)

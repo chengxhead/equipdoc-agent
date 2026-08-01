@@ -225,7 +225,11 @@ def validate_evidence_selection(
         else []
     )
     relevance_matches = sorted(set(selected_ids).intersection(recommended_ids))
-    minimum_relevance_matches = min(2, required_count) if recommended_ids else 0
+    # A partial overlap still lets a model omit one of the user's sub-questions.
+    # Because the model must select exactly ``required_count`` IDs, requiring the
+    # complete deterministic recommendation set makes the gate unambiguous while
+    # retaining the model attempt and retry paths for observability.
+    minimum_relevance_matches = len(recommended_ids)
     return {
         "valid": (
             len(selected_ids) == required_count
@@ -244,6 +248,13 @@ def validate_evidence_selection(
 
 def _selection_tokens(text: str) -> set[str]:
     normalized = text.lower()
+    aliases = []
+    if "维修" in normalized or "维护" in normalized:
+        aliases.append("维修决策")
+    if any(marker in normalized for marker in ("未上传", "没有信号", "无信号")):
+        aliases.append("原始振动信号")
+    if aliases:
+        normalized = f"{normalized} {' '.join(aliases)}"
     tokens = set(re.findall(r"[a-z0-9_]+", normalized))
     for segment in re.findall(r"[\u4e00-\u9fff]+", normalized):
         tokens.update(segment[index : index + 2] for index in range(len(segment) - 1))

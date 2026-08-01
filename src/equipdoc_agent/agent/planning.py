@@ -439,6 +439,80 @@ def _is_self_contained_knowledge_question(user_text: str) -> bool:
     )
 
 
+def _normalize_initial_knowledge_searches(
+    plan_steps: list[dict[str, Any]],
+    user_text: str,
+) -> list[dict[str, Any]]:
+    """Anchor initial knowledge retrieval to the user's complete question.
+
+    Model-written search queries may focus on the remembered fault label and
+    omit a cross-cutting part of the request, such as confidence, trend, or
+    maintenance-decision evidence. Narrow metadata filters can then exclude the
+    relevant general-maintenance chunks entirely. Initial knowledge retrieval
+    therefore keeps only specific fault context from the model query, always
+    starts with the original question, requests the full five-hit budget, and
+    relies on query text instead of model-proposed exact-match filters.
+    """
+    question = _clean_text(user_text, "user_text", required=True, limit=4000)
+    lowered_question = question.lower()
+    cross_cutting_markers = (
+        "rms",
+        "峭度",
+        "峰值因子",
+        "置信度",
+        "维修",
+        "维护",
+        "趋势",
+        "复测",
+        "未上传",
+        "没有信号",
+        "无信号",
+        "原始振动信号",
+        "泛化",
+        "知识库",
+        "资料库",
+        "标准条款",
+    )
+    context_terms = (
+        "外圈故障",
+        "内圈故障",
+        "滚动体故障",
+        "保持架故障",
+        "不平衡",
+        "不对中",
+        "管道泄漏",
+        "泵汽蚀",
+        "齿轮箱",
+        "电池热风险",
+    )
+    is_cross_cutting = any(
+        marker in lowered_question for marker in cross_cutting_markers
+    )
+    normalized_steps = deepcopy(plan_steps)
+    for step in normalized_steps:
+        if step.get("tool") != "search_maintenance_knowledge":
+            continue
+        arguments = dict(step.get("arguments") or {})
+        proposed_query = str(arguments.get("query", "")).strip()
+        query_parts = [question]
+        if "维修" in question or "维护" in question:
+            query_parts.append("维修决策")
+        if any(marker in question for marker in ("未上传", "没有信号", "无信号")):
+            query_parts.append("原始振动信号")
+        if not is_cross_cutting:
+            query_parts.extend(
+                term
+                for term in context_terms
+                if term in proposed_query and term not in question
+            )
+        anchored_query = " ".join(query_parts)[:500].strip()
+        step["arguments"] = {
+            "query": anchored_query,
+            "top_k": 5,
+        }
+    return normalized_steps
+
+
 def parse_and_validate_plan(
     text: str,
     *,
@@ -510,6 +584,12 @@ def parse_and_validate_plan(
         raise PlanningValidationError(
             "clarification is not allowed for a self-contained maintenance knowledge question"
         )
+    if intent == "knowledge_qa" and user_text is not None:
+        normalized["plan"] = _normalize_initial_knowledge_searches(
+            plan_steps,
+            user_text,
+        )
+        normalized["validation"]["knowledge_search_anchored"] = True
     return normalized
 
 
@@ -709,8 +789,6 @@ def fallback_plan(
         intent = "knowledge_qa"
         tool = "search_maintenance_knowledge"
         arguments = {"query": question, "top_k": 5}
-        if equipment:
-            arguments["equipment"] = equipment
     elif inspection_requested:
         intent = "signal_inspection"
         tool = "inspect_signal"
@@ -723,8 +801,6 @@ def fallback_plan(
         intent = "knowledge_qa"
         tool = "search_maintenance_knowledge"
         arguments = {"query": question, "top_k": 5}
-        if equipment:
-            arguments["equipment"] = equipment
     return {
         "intent": intent,
         "confidence": 0.0,

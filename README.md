@@ -20,7 +20,7 @@
 | 工具能力 | `.npy` 信号校验、CNN 诊断接口、知识检索、报告生成 |
 | 安全边界 | 上传沙箱、大小与数值检查、路径白名单、显式降级 |
 | 运行方式 | 本地 Gradio、Docker、AutoDL Full 模式 |
-| 当前证据 | 单元测试、Smoke Test、历史实验文件和限制说明 |
+| 当前证据 | 单元测试、真实模型 Smoke、56-case / 64-turn 正式评测、失败演进和限制说明 |
 
 ## 为什么需要这个 Agent
 
@@ -181,6 +181,8 @@ P2.1 使用“严格 JSON Prompt → 本地 Schema/白名单校验 → 系统执
 
 2026-07-29 的 RTX 4090 实测基线完成20/20次真实模型调用：严格自动通过14/20，平均必需关键词召回91.25%，引用原文逐字匹配率100%，一次预热后的串行端到端 p50/p95 为0.414/0.433秒。结果同时暴露了多子问题证据选择不完整和严格关键词门槛假阴性，不能解释为人工正确率或工业诊断准确率。完整报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，复现步骤见 [`docs/p2-autodl-full-evaluation.md`](docs/p2-autodl-full-evaluation.md)。
 
+2026-08-01 的 P2.1 正式评测在冻结的56-case / 64-turn集上完成：最终自动合同通过64/64，平均 / p50 / p95 端到端延迟为7.472 / 8.541 / 16.758秒。52个规划turn中25个模型计划被首轮或重试接受、27个使用确定性fallback；38个证据回答全部使用`extractive_fallback`。完整失败演进为57/64 → 63/64 → 64/64，正式人工复核工作簿已生成但当前为0/64。因此这些数字不能解释为人工回答正确率或工业诊断准确率。完整报告见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)。
+
 ### 4. 可选：构建向量库
 
 ```bash
@@ -261,10 +263,10 @@ python scripts/eval_safety_grounding.py --min-case-pass-rate 1.00
 | 高风险边界 | 20 条固定用例通过率 100% | 确定性规则、引用有效性与抽取证据一致性 |
 | RAG 检索 | Hit@5 91.0%，MRR@10 76.8% | 100 条旧测试；14篇知识文档；文档级相关性 |
 | Qwen Full 模式 | 严格通过14/20；关键词召回91.25%；p95 0.433秒 | RTX 4090；BM25；模型选择证据ID；引用原文匹配100%；非人工正确率 |
-| P2.1 Agentic | 固定 Smoke 自动通过8/8；p95 22.286秒 | RTX 4090；真实 Qwen + CNN；6个规划 turn 中2个首轮成功、4个确定性 fallback；4个证据回答全部抽取式 fallback；非人工正确率 |
+| P2.1 Agentic | 正式自动合同通过64/64；p95 16.758秒 | RTX 4090；真实 Qwen + CNN；52个规划turn中25个模型计划被接受、27个确定性fallback；38个证据回答全部抽取式fallback；人工复核0/64 |
 | CNN | 暂不报告准确率 | 旧数据不具备可信文件级 Group Split 条件 |
 
-P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，P2 真实模型报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，P2.1 固定 Smoke 见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)，P2.1 正式评测合同见 [`docs/p2-1-formal-evaluation-plan.md`](docs/p2-1-formal-evaluation-plan.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
+P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1.2 安全与证据评测见 [`docs/p1-2-safety-grounding-report.md`](docs/p1-2-safety-grounding-report.md)，P2 真实模型报告见 [`docs/p2-full-evaluation-report.md`](docs/p2-full-evaluation-report.md)，P2.1 Smoke、正式评测和失败演进见 [`docs/p2-1-agentic-evaluation-report.md`](docs/p2-1-agentic-evaluation-report.md)，P2.1 正式评测合同与执行记录见 [`docs/p2-1-formal-evaluation-plan.md`](docs/p2-1-formal-evaluation-plan.md)，后续本地/AutoDL 操作见 [`docs/p1-autodl-runbook.md`](docs/p1-autodl-runbook.md)。
 
 `artifacts/legacy/` 保存原 AutoDL 结果，用于保留实验链路，不作为最终性能结论：
 
@@ -288,14 +290,14 @@ P1 原始口径见 [`docs/evaluation-report.md`](docs/evaluation-report.md)，P1
 
 ## Roadmap
 
-下一阶段聚焦 P2.1 的正式评测和人工质量复核：
+下一阶段聚焦人工质量复核和 P2.1 稳定性提升：
 
-1. 使用 `artifacts/p2_1/agentic_smoke_human_review.xlsx` 完成8个 Smoke turn 的人工复核；
-2. 在已冻结的56-case / 64-turn正式 Agentic 评测集上运行 AutoDL 基线，单独记录模型首轮规划、fallback、调用次数和端到端 p95；
-3. 降低确定性规划 fallback 与抽取式回答 fallback 占比；
-4. 保留旧 CNN 数据泄漏限制，后续按原始文件和工况进行 Group Split；
-5. 为知识库补充权威来源和版本信息；
-6. 正式评测完成后再更新简历数据和产品案例。
+1. 使用 `artifacts/p2_1/agentic_eval_human_review.xlsx` 完成64个正式turn的人工复核；
+2. 降低51.9%的确定性规划fallback占比；
+3. 提升自然语言证据综合通过率，减少38个证据回答全部抽取式fallback的现状；
+4. 多次重复正式集，记录生成稳定性和延迟波动；
+5. 保留旧 CNN 数据泄漏限制，后续按原始文件和工况进行 Group Split；
+6. 为知识库补充权威来源和版本信息，人工复核完成后再更新简历质量指标。
 
 ## License
 
